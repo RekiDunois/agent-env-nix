@@ -8,7 +8,7 @@ It composes two pinned upstreams instead of vendoring them:
 - [mcp-servers-nix](https://github.com/natsukium/mcp-servers-nix/tree/31848978eefbca17f1658a55066b1d2aaa43cafc) supplies server packages, modules, and TOML generation.
 - [TOMLKit](https://github.com/python-poetry/tomlkit) edits selected existing TOML tables while preserving unrelated settings and comments.
 
-This repository adds an explicit package/dependency contract, native Codex agent files, and a narrow ownership-aware activation layer. Codex is the only implemented harness. Existing producer APM/uv workflows are unchanged.
+This repository adds an explicit package/dependency contract, native Codex agent files, and a narrow shell activation layer with MCP-only configuration protection. Codex is the only implemented harness. Existing producer APM/uv workflows are unchanged.
 
 ## Try the included example
 
@@ -107,17 +107,21 @@ Different payloads with the same package ID fail. Different packages exporting t
 - `.agents/skills/<name>/`: complete ordinary files
 - `.codex/agents/<name>.toml`: native `name`, `description`, and `developer_instructions`
 - Selected `mcp_servers.<name>` tables in `.codex/config.toml`
-- `.agent-env-nix/`: local ownership state, lock, staging/journal, and Nix GC roots; add this directory to your project's `.gitignore`
+- `.agent-env-nix/`: deployment-name inventory, MCP state, lock, temporary staging, and Nix GC roots; add this directory to your project's `.gitignore`
 
 Upstream `rsync --delete` runs only in a fresh private staging directory. It never owns the project's whole `.agents/skills` directory. Selected installer-owned skill trees are generated artifacts and replaced wholesale, including any direct edits. Change the producer repository instead. Unrelated sibling skills are untouched.
 
-Existing identical skills, agents, or MCP definitions are reused without becoming owned. Conflicting unowned resources fail. Owned native-agent files and MCP entries are updated or removed only when they still match the last generated state. Direct user edits are preserved and reported. Removing an environment does not remove reused/unowned content or the containing config/skills/agents directories.
+Every selected skill tree and native agent file is replaced unconditionally, including preexisting same-name content and direct edits. Only those exact leaf paths are replaced; unrelated siblings and the containing skill/agent directories remain untouched. Selection changes and remove clean up only previously recorded export names. A selected leaf symlink is removed without following it; symlinked parent directories are rejected.
 
-TOMLKit performs the TOML edit. Only selected MCP tables are changed; model/provider/permissions and unknown unrelated keys remain intact. The whole original config file is checked immediately before publication, so concurrent unrelated edits abort rather than being overwritten. File publication uses atomic rename. Replacing a nonempty skill tree uses a journaled old-tree backup followed by the new-tree rename, so interruption can leave a temporary gap until retry. There is no whole-project atomicity guarantee. Pending operations and previous roots are retained for safe retry after interruption.
+MCP configuration has a different policy: existing equal unowned definitions are reused without taking ownership; conflicting unowned definitions fail. Previously generated MCP entries are changed or removed only when their current value is still a recorded generated value. User edits to those entries are preserved and reported.
+
+Nix generates standard shell copy commands for producer payloads and project skill/agent files. Python is used only for the MCP/TOML configuration helper. TOMLKit changes selected MCP tables; model/provider/permissions and unknown unrelated keys remain intact. The whole parsed config snapshot is checked immediately before a temporary file replaces config.toml, so observed concurrent unrelated edits abort rather than being overwritten.
+
+There is no cross-file journal, rollback or whole-project atomicity. An interruption can leave selected files partially updated or temporarily missing. The command reports failure; fix the error and rerun to copy the selected resources again. A small deployment-name inventory and necessary roots remain for retry/remove. MCP-only generated-value bookkeeping preserves configuration ownership across an interrupted config write. A new launcher converts the known prior state format; an old pending journal must first be resolved with the old launcher.
 
 ## Configuration scope
 
-Activation checks the target and ancestor project config layers, `$CODEX_HOME/config.toml` (default `$HOME/.codex/config.toml`), `/etc/codex/config.toml`, native agent directories, and referenced legacy role files. These additional sources are read-only. Equal inherited definitions avoid redundant project entries; unequal same-name definitions conflict rather than being silently shadowed.
+For selected MCP keys, activation checks the target and ancestor project config layers, `$CODEX_HOME/config.toml` (default `$HOME/.codex/config.toml`), and `/etc/codex/config.toml`. These additional sources are read-only. Equal inherited MCP definitions avoid redundant project entries; unequal same-name MCP definitions conflict rather than being silently shadowed. Native agent files do not use this conflict scan: selected local files are replaced, without removing or interpreting parent/global agent definitions. File-only environments skip unrelated TOML discovery.
 
 Repeat `--extra-config FILE` for other known file-based sources. Detected unsupported selected profile sources fail safely. Managed/cloud/MDM sources and later session `-c` overrides that are unavailable to this local file workflow are outside its validation guarantee. This is not a full Codex configuration engine.
 
@@ -127,13 +131,13 @@ MCP conversion is deliberately bounded: stdio and streamable HTTP only; no SSE. 
 
 Before publishing files, activation registers the immutable environment output as an indirect Nix GC root at a stable generation-specific path inside `.agent-env-nix/roots/`. Its closure includes selected packages, fixed runtime packages, MCP configuration, the upstream staging program, and activation tools. Copied store-path strings alone are not treated as GC roots.
 
-Registration failure aborts publication. Old roots remain until replacement completes; conflict-preserved resources keep their needed roots. The tool never runs garbage collection. If you move a project, reactivate it at the new location before removing old root links. Manual deletion of its state/root directory is outside managed retention.
+Registration failure aborts publication. Old roots remain until replacement completes; failed attempts and preserved/reused configuration keep their needed roots. Legacy reused content can conservatively retain old roots until its references are known to be unnecessary. The tool never runs garbage collection. If you move a project, reactivate it at the new location before removing old root links. Manual deletion of its state/root directory is outside managed retention.
 
 ## Development
 
 ```sh
 nix develop
-python -m unittest discover -s tests -p 'test_*.py' -v
+nix build .#checks.x86_64-linux.runtime-unit .#checks.x86_64-linux.upstream-copy
 nix flake check
 ```
 
@@ -142,3 +146,4 @@ Tests are local fixtures. They do not migrate consumer repositories, call live M
 ## License
 
 [MIT](LICENSE). Upstream dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+

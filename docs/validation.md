@@ -1,3 +1,35 @@
+# R3 shell/config simplification validation
+
+Validated on 2026-10-15 in the existing cloud Linux workspace, with Nix 2.35.3 and unchanged locked inputs. Product baseline: main 3b08c9e652dd8df5f3c1686347ef671476022335. This record describes the implementation candidate published with this change; it does not imply merge approval.
+
+## Current scoped results
+
+- T1: PASS. Standard-tool payload builder checks cover complete files, dotfiles, empty directories, executable bits and internal-link materialization, with the existing source-boundary failures. The original unsafe/overlap destination assertions are forced by runtime-unit. The real pinned upstream copy-tree check passed.
+- T2: PASS. The existing two-example integration replaced preexisting same-name skill/agent content, removed stale content inside the selected skill, replaced direct edits on repeat apply, and removed recorded exports while retaining unrelated settings/comments/MCP and sibling skill.
+- T3: PASS. Existing MCP-only checks cover equal-unowned reuse, conflicting/edited values, source checks, unrelated settings/comments, whole-file snapshots, config interruption bookkeeping and repeat/remove behavior.
+- T4: PASS within the existing offline scope. Shell checks cover unsafe destination components, selected leaf symlinks, interrupted copy/full rerun, root registration failure, generation-switch retention/release, and known legacy inventory conversion/unknown state. Integration observed actual indirect GC-root registration and release; no GC deletion was run.
+- Final runtime-unit result: 38 tests, all passed. The retained count is a report, not an acceptance requirement. The upstream-copy target and one real integration run also passed.
+
+The built environment was /nix/store/za2cmnca1npfb4kv6m1wp44pssrszb1i-agent-environment. Source hashes: runtime/activate.sh 925ba25cd284def43b39247be186d34542e044d7bdf2c848ed98fcc6032a2be7; runtime/config.py 383785dab2ef6ba00514008c7a3b6eed7e8ee4de4f0da532b0a01aec981a117c. The unchanged producer API/graph/MCP normalization is supported by prior unaffected results plus current construction of the two examples; no blanket graph/platform rerun was required.
+
+## Attempts and correction
+
+An initial attempt was interrupted during authorization clarification; its captured output only showed an official-cache connection warning. After explicit authorization, official cache downloads succeeded and both examples/environment built. In that first completed offline run, upstream-copy passed and 34 of 38 unit checks passed; four shell fixture checks failed because their fake executables used /usr/bin/env, which is absent in the Nix build sandbox. This was test wiring, not a product assertion change.
+
+The fixtures now use the absolute Bash supplied by runtime-unit. Independent second-gate review accepted this narrow correction; the full runtime-unit was rerun (including the root-failure scenario whose earlier apparent success could have been caused by the interpreter error). All 38 passed. The already-passing upstream-copy result was reused, then the two-example integration exited 0 with INTEGRATION_PASS. Original failure output and corrected output were retained separately.
+
+Commands are the exact TP2.2 steps in [test plan](../plan/test-plan.md), with only runtime-unit selected for the fixture correction rerun. Local output directory: /tmp/agent-env-shell-check.OobkKE; logs offline.log, offline-authorized.log, offline-fixture-fixed.log, build.log and integration.log. These are ordinary local execution outputs, not committed raw artifacts. The integration fixture remained under that output directory and successful remove released its managed root.
+
+## Limits
+
+- No formal Codex eval, model invocation, live MCP service, real consumer migration, six-producer regression or user Mac operation.
+- No Darwin build/runtime execution; the Linux pass does not imply macOS runtime compatibility.
+- No whole-project atomicity or cross-file recovery: failure can leave partial selected files until rerun.
+- The config snapshot guard protects observed changes; the existing narrow compare/replace race with arbitrary external editors remains.
+- Prior tests below are historical and apply only where their behavior remains unaffected.
+
+## Historical pre-refactor results
+
 # Validation: initial two-package implementation
 
 Validated on 2026-10-15 in the cloud Linux workspace. The repository's original LICENSE is unchanged: Git blob `6dab5e0f3d6834389faa196d426e461578332209`.
@@ -52,3 +84,4 @@ A real first build caught a source-path context bug; it was fixed with context-p
 - No real workflow repositories or downstream business behavior were tested.
 - File-based config checks cannot validate unavailable managed/cloud/MDM sources or later session overrides. The README states that boundary.
 - File publication uses atomic rename; skill replacement is journaled across an old-tree backup and a new-tree rename. This is not a whole-project transaction.
+

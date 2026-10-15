@@ -1,26 +1,53 @@
-import importlib.util
+"""Exercise the actual Nix-generated builder with temporary source fixtures."""
+
 import os
 from pathlib import Path
+import shlex
+import subprocess
 import tempfile
 import unittest
-
-SPEC = importlib.util.spec_from_file_location("materialize", Path(__file__).parents[1] / "runtime/materialize.py")
-materialize = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(materialize)
 
 
 class MaterializeTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(prefix="materialize ' fixture-")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.source = self.base / "source"
         self.source.mkdir()
         (self.source / "SKILL.md").write_text("A complete skill\n")
         self.output = self.base / "output"
+        self.payload = self.output / "payload/skills/demo"
+        # tests/default.nix extracts this script from the real derivation; only
+        # the source literal changes so invalid trees can be made at test time.
+        self.builder = Path(os.environ["AGENT_ENV_MATERIALIZE_BUILDER"]).read_text()
+        source_lines = [line.strip() for line in self.builder.splitlines()
+                        if line.strip().startswith("source=")]
+        self.assertEqual(len(source_lines), 1)
+        self.sentinel = source_lines[0]
+        self.assertIn(self.sentinel, [
+            "source=/agent-env-materialize-test-source",
+            "source='/agent-env-materialize-test-source'",
+        ])
+        self.assertEqual(self.builder.count(self.sentinel), 1)
 
-    def run_copy(self):
-        materialize.materialize({"skills/demo": str(self.source)}, {"demo": "skills/demo"}, self.output)
+    def run_copy(self, source=None):
+        script = self.builder.replace(self.sentinel, "source=" + shlex.quote(str(source or self.source)))
+        return subprocess.run(
+            ["bash", "-c", script],
+            env={**os.environ, "out": str(self.output)},
+            text=True, capture_output=True,
+        )
+
+    def assert_copied(self):
+        result = self.run_copy()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def assert_rejected(self, message=None, source=None):
+        result = self.run_copy(source=source)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        if message is not None:
+            self.assertIn(message, result.stderr)
 
     def test_complete_tree_dotfiles_and_executable_bits(self):
         (self.source / "scripts").mkdir()
@@ -29,54 +56,52 @@ class MaterializeTests(unittest.TestCase):
         script.chmod(0o755)
         (self.source / ".hidden").write_text("asset")
         (self.source / "empty").mkdir()
-        self.run_copy()
-        self.assertEqual((self.output / "skills/demo/.hidden").read_text(), "asset")
-        self.assertEqual((self.output / "skills/demo/scripts/run").stat().st_mode & 0o111, 0o111)
-        self.assertTrue((self.output / "skills/demo/empty").is_dir())
+        self.assert_copied()
+        self.assertEqual((self.payload / ".hidden").read_text(), "asset")
+        self.assertEqual((self.payload / "scripts/run").stat().st_mode & 0o111, 0o111)
+        self.assertTrue((self.payload / "empty").is_dir())
 
     def test_internal_links_materialized(self):
         (self.source / "alias").symlink_to("SKILL.md")
-        self.run_copy()
-        target = self.output / "skills/demo/alias"
+        (self.source / "assets").mkdir()
+        (self.source / "assets/data").write_text("nested")
+        (self.source / "linked-assets").symlink_to("assets", target_is_directory=True)
+        self.assert_copied()
+        target = self.payload / "alias"
         self.assertFalse(target.is_symlink())
         self.assertEqual(target.read_bytes(), (self.source / "SKILL.md").read_bytes())
+        self.assertFalse((self.payload / "linked-assets").is_symlink())
+        self.assertEqual((self.payload / "linked-assets/data").read_text(), "nested")
 
     def test_escape_rejected(self):
         (self.base / "outside").write_text("outside")
         (self.source / "escape").symlink_to("../outside")
-        with self.assertRaisesRegex(materialize.MaterializeError, "escapes"):
-            self.run_copy()
+        self.assert_rejected("escapes")
+        self.assertFalse(self.payload.exists())
 
     def test_dangling_and_cyclic_links_rejected(self):
         for name, target in [("missing", "absent"), ("cycle", ".")]:
             with self.subTest(name=name):
                 link = self.source / name
                 link.symlink_to(target)
-                with self.assertRaises(materialize.MaterializeError):
-                    materialize.materialize({"skill": str(self.source)}, {"demo": "skill"}, self.base / name)
+                self.assert_rejected()
+                self.assertFalse(self.payload.exists())
                 link.unlink()
+
+    def test_top_level_link_rejected(self):
+        link = self.base / "linked-source"
+        link.symlink_to(self.source, target_is_directory=True)
+        self.assert_rejected("non-symlink root", source=link)
+        self.assertFalse(self.payload.exists())
 
     def test_special_file_rejected(self):
         os.mkfifo(self.source / "pipe")
-        with self.assertRaisesRegex(materialize.MaterializeError, "special"):
-            self.run_copy()
-
-    def test_overlap_and_unsafe_paths_rejected(self):
-        for files in [{"a": str(self.source), "a/b": str(self.source)}, {"../escape": str(self.source)}, {"/absolute": str(self.source)}]:
-            with self.subTest(files=files), self.assertRaises(materialize.MaterializeError):
-                materialize.materialize(files, {}, self.output)
-        self.assertFalse(self.output.exists())
+        self.assert_rejected("special")
+        self.assertFalse(self.payload.exists())
 
     def test_missing_skill_rejected(self):
-        with self.assertRaisesRegex(materialize.MaterializeError, "SKILL.md"):
-            materialize.materialize({"skill": str(self.source)}, {"demo": "missing"}, self.output)
-
-    def test_nonempty_output_rejected(self):
-        self.output.mkdir()
-        (self.output / "keep").write_text("keep")
-        with self.assertRaises(materialize.MaterializeError):
-            self.run_copy()
-        self.assertEqual((self.output / "keep").read_text(), "keep")
+        (self.source / "SKILL.md").unlink()
+        self.assert_rejected("SKILL.md")
 
 
 if __name__ == "__main__":

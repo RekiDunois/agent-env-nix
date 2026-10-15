@@ -1,26 +1,37 @@
-# PR #1 测试计划独立审核记录
+# Current second-gate result: TP2.2
 
-审核日期：2026-10-15。审核对象：`plan/test-plan.md`，TP1.1。
+Independent reviewer on 2026-10-15: Second gate PASS; review completeness COMPLETE. Reviewed TP2.2-candidate SHA256 209140a01102593d2c8affc2cbb385ca614a9a68435edcc9d9bf73331d39b70c. The four TP2.1 step findings were closed: explicitly forced original path checks, restored original generation-switch scenario, accurate unit versus integration fixture retention, and a maximum one external retry. No scope expansion; no tests executed by reviewer. The incidental duplicate boolean check output was removed by the implementer. Third gate remains not performed pending execution.
 
-- 候选 SHA256：`3b2abc66f22aca0d63e9a9ff0f9b49adeb28269d257c66a425f7a177443dee27`
-- 目标产品：`760c1bf60e8ec19d1985660ec5e3276a8ef80b5a`
-- 依据：[R2](../docs/requirements.md)、[实施计划 v0.5](implementation.md)、[Test Engineer Rule](https://app.notion.com/p/3d80101a85f380d8a8f5ce528141e253)、[PROJECT_CONSENSUS](https://app.notion.com/p/3d60101a85f3815a8c43f271f2b4d91d)，以及用户确认“你就照着你已经做完的测试写就行，反正那个就算是测够了”。
-- 方式：未参与本测试计划编写的独立 reviewer 只读检查完整候选、R2、flake/check/devShell、`tests/default.nix`、`tests/integration.sh`、既有 activation/materialization 入口和 `docs/validation.md`。未修改产品、执行测试或新增目标。
+## Prior design/scope record (superseded step status below)
 
-## 第一关：PASS
+# Independent scoped test-plan review
 
-T1–T6 整理已有两示例、三个 check、真实集成及两平台求值的既定范围，覆盖显式依赖与投影、完整资源与原生配置、项目应用/移除和 GC roots、配置保护、安全失败及平台声明边界。预期与 R2 一致，没有将当前输出自行升级为要求。54 项既有单元集合不拆成新增验收关口；不增加业务回归、模型/live API、真实消费者迁移或通用证明设施。Linux 实际构建/运行与 Darwin 仅求值边界准确。用户认可的已有测试集合即本轮上限。
+Date: 2026-10-15. Independent read-only reviewer, not the candidate author; no tests executed.
 
-## 第二关：PASS
+Test revision: TP2-candidate
+SHA256: 274e73c23064f9856e9d03840175e9c895d1a2cd8e6f4fb95c86dba9668f6f75
+Requirement: R3
+Implementation: v0.6-candidate
+Baseline: main 3b08c9e652dd8df5f3c1686347ef671476022335
 
-完整候选区分历史命令、已有结果复用和仅供后续获授权复现的便携步骤；本轮明确不新增、不重跑。复现说明固定已有 lock、仓库路径与产物，准备独立 `/tmp` 输出，使用一次 flake check 覆盖既有检查集合；integration 不属于 checks，单独通过已有正式 launcher 执行真实 apply/repeat/remove，nix develop 提供 Python/TOMLKit。all-systems 使用 --no-build，不冒称 Darwin 构建通过。有效产物、缓存和旧结果可复用，不强制重建，不重复本地 Python 集合。失败分类、停止后续依赖步骤、恢复后最多一次外部故障重试、隔离状态保留和正式 remove 清理路径明确，未增加额外测试义务。
+Design review: PASS
+First gate, required scope: PASS
+Review completeness: COMPLETE
+Second gate: PENDING exact post-implementation entrypoints, commands and execution instructions; not approved in this review.
+Third gate: NOT PERFORMED; new results do not exist.
 
-## 结论与边界
+T1–T4 cover directly changed full copying, unconditional selected replacement/stale cleanup, MCP protection and failure/closure behavior. Scope remains the two existing business examples and directly related existing offline checks. No platform matrix, six-producer regression, formal eval, custom evaluator or provenance proof is added.
 
-- Review completeness：COMPLETE
-- Required modifications：无
-- Missing evidence for Gate1/Gate2：无
-- 新增测试或重跑要求：无
-- 第三关：未审核。本记录不将 T1–T6 或历史结果追认为正式通过，也不作合并结论。已有结果适用性按计划交结果审核负责人直接采用或注明待补，不能因本次文档提交自动要求重跑。
+The complete candidate and existing entrypoints/assertions were reviewed. Obsolete agent ownership/discovery and cross-file recovery expectations must be replaced/removed. The historical 54-test count is not an acceptance requirement. Unaffected results can be reused through impact analysis. No execution is authorized merely by this design/scope approval.
 
-TP1.1 第一关、第二关通过。仅适用于上述精确候选；纯文档提交号变化不使结论失效，语义变化只复核受影响范围。
+Required modifications: none for design/first gate. Before any execution, fill in precise final commands and obtain the second-gate review within the approved scope. Parent confirmation remains required before implementation proceeds.
+
+## Fixture correction after authorized first run
+
+The first completed run passed upstream-copy and 34 of 38 unit checks; four shell fixtures failed due to /usr/bin/env absence in the Nix sandbox. The independent reviewer verified the sole fixture fix: fake executables use the already supplied Bash absolute path. tests/test_shell_activation.py SHA256 413ce13911d0669223003a4551993f394ed1a7524339233167a7a971aef948fc. Second-gate conclusion remains PASS, completeness COMPLETE. The reviewer agreed to rerun runtime-unit (not the already-passing upstream-copy) and then the approved integration. This was a wiring correction, not an altered expected result or scope expansion.
+
+## Current third-gate result: TP2.2
+
+2026-10-15 independent read-only result review: Third gate PASS; review completeness COMPLETE. Applicable to TP2.2, the approved fixture shebang correction and built za2cmnca1npfb4kv6m1wp44pssrszb1i-agent-environment. T1, T2, T3 and T4 PASS within the specified offline/two-example scope. Final runtime-unit 38/38 and INTEGRATION_PASS are accepted; upstream-copy is reused because the fixture correction did not affect it. The earlier interrupted attempt and 34/38 fixture-failure record remain recorded.
+
+No in-scope result is missing or an unhandled failed test. Darwin runtime, formal Codex eval, live MCP and six-producer regression were not performed and are outside this conclusion. No tests were rerun by the reviewer. This is not merge approval.

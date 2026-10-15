@@ -13,6 +13,7 @@
 let
   fail = reason: throw "agent-env-nix: package ${id}: ${reason}";
   safeRelative = path: builtins.isString path && path != "" &&
+    builtins.match ".*[[:cntrl:]].*" path == null &&
     !(lib.hasPrefix "/" path) && builtins.all
       (part: part != "" && part != "." && part != "..") (lib.splitString "/" path);
   safeName = name: builtins.match "[A-Za-z0-9][A-Za-z0-9_-]*" name != null;
@@ -53,10 +54,53 @@ let
       fail "agent ${name} must define nonempty description and developer_instructions"
     else (pkgs.formats.toml { }).generate "agent-${name}.toml" ({ inherit name; } // value)
   ) agents;
-  # Interpolation imports path-valued sources with their dependency context;
-  # plain toString on a path would leave an untracked sandbox-invisible path.
-  filesConfig = pkgs.writeText "agent-env-files.json" (builtins.toJSON (lib.mapAttrs (_: source: "${source}") files));
-  skillsConfig = pkgs.writeText "agent-env-skill-paths.json" (builtins.toJSON skills);
+  # Generate one bounded validation/copy block per declared entry. Interpolation
+  # imports path-valued sources and retains their Nix dependency context.
+  copyFiles = lib.concatStringsSep "\n" (lib.mapAttrsToList (relative: source: ''
+    source=${lib.escapeShellArg "${source}"}
+    destination="$out/payload"/${lib.escapeShellArg relative}
+    case "$source" in
+      /*) ;;
+      *) echo "agent-env-nix: source must be absolute: $source" >&2; exit 1 ;;
+    esac
+    # A trailing slash or /. must not disguise a top-level symlink.
+    while [ "$source" != / ]; do
+      case "$source" in
+        */) source="''${source%/}" ;;
+        */.) source="''${source%/.}"; source="''${source:-/}" ;;
+        *) break ;;
+      esac
+    done
+    if [ -L "$source" ]; then
+      echo "agent-env-nix: source must be a non-symlink root: $source" >&2
+      exit 1
+    fi
+    links=$(${pkgs.coreutils}/bin/mktemp)
+    invalid=$(${pkgs.coreutils}/bin/mktemp)
+    ${pkgs.coreutils}/bin/realpath -e -z -- "$source" > "$invalid"
+    IFS= read -r -d "" boundary < "$invalid"
+    # Enumerate physical links before traversing them; every target must stay
+    # inside this entry's declared source boundary, even through other links.
+    ${pkgs.findutils}/bin/find -P "$source" -type l -print0 > "$links"
+    while IFS= read -r -d "" link; do
+      ${pkgs.coreutils}/bin/realpath -e -z -- "$link" > "$invalid"
+      IFS= read -r -d "" resolved < "$invalid"
+      case "$resolved" in
+        "$boundary"|"''${boundary%/}"/*) ;;
+        *) echo "agent-env-nix: source link escapes declared tree: $link" >&2; exit 1 ;;
+      esac
+    done < "$links"
+    # find diagnoses traversal cycles. Any remaining non-file/non-directory
+    # object (including a dangling link) is invalid; cp never sees such a tree.
+    ${pkgs.findutils}/bin/find -L "$source" ! -type f ! -type d -print0 > "$invalid"
+    if [ -s "$invalid" ]; then
+      echo "agent-env-nix: special or dangling source file is unsupported: $source" >&2
+      exit 1
+    fi
+    ${pkgs.coreutils}/bin/rm -- "$links" "$invalid"
+    ${pkgs.coreutils}/bin/mkdir -p -- "$(${pkgs.coreutils}/bin/dirname -- "$destination")"
+    ${pkgs.coreutils}/bin/cp -R -L --preserve=mode -- "$source" "$destination"
+  '') files);
   payloadManifest = pkgs.writeText "agent-env-package.json" (builtins.toJSON {
     schemaVersion = 1;
     inherit id version skills servers;
@@ -65,7 +109,7 @@ let
     dependencies = map (dep: toString dep) agentDependencies;
   });
   result = pkgs.runCommand "${lib.strings.sanitizeDerivationName id}-${lib.strings.sanitizeDerivationName version}" {
-    nativeBuildInputs = [ pkgs.python3 ];
+    nativeBuildInputs = [ pkgs.coreutils pkgs.findutils ];
     passthru.agentEnv = {
       schemaVersion = 1;
       inherit id version agentDependencies runtimePackages servers;
@@ -73,9 +117,16 @@ let
       exports = { inherit skills agents; };
     };
   } ''
+    set -euo pipefail
     mkdir -p "$out/payload" "$out/codex/agents"
-    ${pkgs.python3}/bin/python ${../runtime/materialize.py} \
-      --files ${filesConfig} --skills ${skillsConfig} --output "$out/payload"
+    ${copyFiles}
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: relative: ''
+      skill="$out/payload"/${lib.escapeShellArg relative}
+      if [ ! -d "$skill" ] || [ ! -f "$skill/SKILL.md" ]; then
+        echo ${lib.escapeShellArg "agent-env-nix: skill ${name} is missing its directory or SKILL.md: ${relative}"} >&2
+        exit 1
+      fi
+    '') skills)}
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: file: ''
       cp ${file} "$out/codex/agents/${name}.toml"
     '') agentFiles)}
@@ -84,3 +135,4 @@ let
 in
 assert checks;
 result
+

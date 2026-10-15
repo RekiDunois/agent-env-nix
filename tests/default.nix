@@ -2,6 +2,14 @@
 let
   lib = pkgs.lib;
   python = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
+  materializeFixture = agentLib.mkAgentPackage {
+    inherit pkgs;
+    id = "materialize-test";
+    version = "1";
+    files."skills/demo" = "/agent-env-materialize-test-source";
+    exports.skills.demo = "skills/demo";
+  };
+  materializeBuilder = pkgs.writeText "agent-env-materialize-test-builder" materializeFixture.drvAttrs.buildCommand;
   succeeds = value: (builtins.tryEval (builtins.deepSeq value true)).success;
   empty = extra: agentLib.mkAgentPackage ({
     inherit pkgs;
@@ -40,6 +48,10 @@ let
     env_http_headers = { };
   }; };
   collision = example.base.override { id = "second-exporter"; };
+  materializePathsValid =
+    assert !succeeds (empty { files."../unsafe" = ./integration.sh; }).drvPath;
+    assert !succeeds (empty { files = { "overlap" = ./integration.sh; "overlap/nested" = ./integration.sh; }; }).drvPath;
+    true;
   evaluation =
     assert example.base.drvPath == disabled.drvPath;
     assert (called.override { enableHarnesses = [ ]; }).agentEnv.enableHarnesses == [ ];
@@ -70,7 +82,9 @@ in
 {
   evaluation = assert evaluation; pkgs.runCommand "agent-env-evaluation" { } ''touch "$out"'';
 
-  runtime-unit = pkgs.runCommand "agent-env-runtime-unit" { nativeBuildInputs = [ python ]; } ''
+  runtime-unit = assert materializePathsValid; pkgs.runCommand "agent-env-runtime-unit" { nativeBuildInputs = [ python pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.jq pkgs.flock ]; } ''
+    export AGENT_ENV_MATERIALIZE_BUILDER=${materializeBuilder}
+    export AGENT_ENV_ACTIVATION_SCRIPT=${example.project}/lib/activate.sh
     cp -R ${../runtime} runtime
     cp -R ${../tests} tests
     chmod -R u+w runtime tests
@@ -103,3 +117,4 @@ in
     touch "$out"
   '';
 }
+
