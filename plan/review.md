@@ -1,3 +1,7 @@
+# Current platform scope: aarch64-darwin only
+
+2026-10-15 user clarification: first-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or testing gates; existing platform code is unchanged. Prior design and static-code approvals remain valid for unchanged behavior; only platform statements receive this targeted review. Linux execution results and their result-review PASS remain historical supplementary evidence, not Darwin validation. Darwin build/runtime execution has NOT RUN and Darwin acceptance remains pending. This documentation-only addendum passed independent targeted platform review on 2026-10-15; no tests were rerun.
+
 # Independent plan review: v0.6
 
 Date: 2026-10-15. Reviewer: independent review task, not the candidate author. Read-only review; no product changes or tests.
@@ -33,3 +37,7 @@ Reused prior Plan Gate PASS: N/A; current R3 changes and their direct impacts we
 Approved behavior changes: unconditional selected skill/agent replacement; Python only config; no cross-file journal. Authority is the exact user messages recorded in implementation.md section 1.
 
 Next owner: parent task confirms implementation. This approval is not a code correctness, test result, execution permission or merge conclusion.
+
+## Targeted platform amendment review, 2026-10-15
+
+Independent parent review of the complete updated test plan and documentation diff: PASS. First-round support and current test steps target only aarch64-darwin; Linux command records remain historical auxiliary evidence in validation.md. Unchanged implementation/design and static-code approvals are reused. No code or test execution occurred in this review. Darwin execution and acceptance remain pending; this is not merge approval or authorization to operate a Mac.

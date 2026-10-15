@@ -1,3 +1,7 @@
+# Current platform scope: aarch64-darwin only
+
+2026-10-15 user clarification: first-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or testing gates; existing platform code is unchanged. Prior design and static-code approvals remain valid for unchanged behavior; only platform statements receive this targeted review. Linux execution results and their result-review PASS remain historical supplementary evidence, not Darwin validation. Darwin build/runtime execution has NOT RUN and Darwin acceptance remains pending. This documentation-only addendum passed independent targeted platform review on 2026-10-15; no tests were rerun.
+
 # Independent static code review
 
 2026-10-15, R3 / implementation v0.6. Baseline main 3b08c9e652dd8df5f3c1686347ef671476022335. Independent reviewer did not edit or execute the product.

@@ -1,6 +1,12 @@
 # Scoped test plan for activation simplification
 
-Revision TP2.2-candidate, 2026-10-15. Requirement R3; implementation v0.6-candidate; baseline main 3b08c9e652dd8df5f3c1686347ef671476022335. Proposed review status: pending. This is a plan and affected-test revision proposal only; no tests or formal eval have been run for this change.
+Revision TP2.2-candidate, 2026-10-15. Requirement R3; implementation v0.6-candidate; baseline main 3b08c9e652dd8df5f3c1686347ef671476022335. The original TP2.2 execution and third-gate review are recorded in test-review.md and docs/validation.md. This Darwin-only scope addendum passed independent targeted review on 2026-10-15; it does not change code or rerun tests.
+
+## Current platform acceptance
+
+First-round delivery and testing target only aarch64-darwin. Linux support, Linux builds and a cross-platform matrix are not acceptance gates. Keep existing Linux code and historical run records unchanged as supplementary evidence. Darwin build/runtime checks have NOT RUN, so current Darwin acceptance remains pending; historical TP2.2 Linux PASS is not a Mac PASS. No new execution is authorized by this documentation change.
+
+The required behavior goals T1–T4 below remain unchanged. On an authorized Apple Silicon Mac, the existing runtime-unit/upstream-copy checks and two-example integration are the intended entries; use checks.aarch64-darwin rather than Linux targets. The direct Mac steps below receive only targeted platform review; unchanged T1–T4 scope and prior design/step review are retained.
 
 ## Authority and scope
 
@@ -17,7 +23,7 @@ Only example-base and example-tools remain business examples. Existing offline s
 | T3 Config protection remains | Existing MCP equal-unowned, unequal/edited keys, automatic/extra config source, unrelated comments/settings, whole-file snapshot checks | Only selected managed MCP keys change; equal unowned entries stay unowned; conflicting user values and unrelated concurrent edits are preserved; file-only activation does not audit unrelated config | Retain relevant existing test_activate.py cases against config-only helper; discard native-agent discovery/conflict expectations. |
 | T4 Failure and lifecycle match simplification | Existing unsafe-path/source fixtures, root-registration failure, interrupted copy/config update and generation/remove fixtures | Unsafe paths do not escape project; root failure publishes nothing; interrupted file work fails and full rerun converges without journal; required closure roots remain until safe cleanup; clean remove releases unneeded roots | Adapt directly corresponding existing offline checks and integration root observations, without new fault types or combination matrix. State migration behavior is covered by adapting the existing schema/state fixture rather than a new migration harness. |
 
-Untouched graph resolution, producer override and MCP normalization tests remain in tests/default.nix but their prior valid results need not be rerun solely because this commit changes. Darwin runtime remains unverified. No new platform check is required. If an implementation change actually alters an allegedly untouched behavior, report its impact before expanding execution.
+Untouched graph resolution, producer override and MCP normalization tests remain in tests/default.nix but their prior valid results need not be rerun solely because this commit changes. Darwin runtime remains unverified and its acceptance is pending. No Linux or platform-matrix check is required. If an implementation change actually alters an allegedly untouched behavior, report its impact before expanding execution.
 
 ## Affected existing assertions
 
@@ -28,58 +34,36 @@ Untouched graph resolution, producer override and MCP normalization tests remain
 - Adapt integration's state observations to the minimal inventory/config state/root layout. Add preexisting/edited selected agent to the existing lifecycle rather than creating another test suite. Continue using the same two packages and existing formal bin/agent-env entry.
 - Do not duplicate each goal across unit, integration and manual runs. Existing incidental overlap does not create another execution obligation. Preserve still-relevant tests but do not treat the previous count of 54 as an acceptance requirement.
 
-## Preparation and exact scoped execution steps
+## Current aarch64-darwin execution steps
 
-The parent authorized affected offline verification after independent code review and this step review. Formal Codex eval remains excluded; no model, MCP service, six-producer business test or platform matrix is run. Implementation preparation itself has run no tests.
+These are the existing approved checks with the platform and workspace entry changed for an Apple Silicon Mac. This is a targeted platform correction, not a new suite or a reopening of unchanged scope/design reviews. No execution is claimed or newly authorized here. Run only in an authorized Mac checkout; do not run these as Linux delivery gates. Keep unchanged locked inputs and the same two examples. No reinstall, lock update, model, live MCP, six-producer regression or platform matrix.
 
-Use the existing official task-local Nix 2.35.3 installation documented at /workspace/shared/nix-bootstrap/README.txt, including its already approved namespace wrapper. No reinstall, security-setting change or lock update. The current candidate root is /workspace/shared/agent-env-nix-simplify. All output and fixture files go in a new /tmp run directory. Example artifacts may use valid Nix caches; changed derivations cannot reuse old activation PASS.
-
-From this cloud shell, prepare once:
+From the repository root on the authorized Mac:
 
 ```bash
 set -euo pipefail
-repo=/workspace/shared/agent-env-nix-simplify
-run=$(mktemp -d /tmp/agent-env-shell-check.XXXXXX)
-printf 'repo=%s\nrun=%s\nplan=TP2.2\n' "$repo" "$run"
-```
-
-### T1, T3, T4: directly affected existing offline checks
-
-```bash
-/workspace/shared/nix-bootstrap/bin/nix build --no-update-lock-file --no-link -L \
-  "path:$repo#checks.x86_64-linux.runtime-unit" \
-  "path:$repo#checks.x86_64-linux.upstream-copy" \
+repo="$PWD"
+run=$(mktemp -d "${TMPDIR:-/tmp}/agent-env-shell-check.XXXXXX")
+printf 'repo=%s\nrun=%s\nplatform=aarch64-darwin\n' "$repo" "$run"
+nix build --no-update-lock-file --no-link -L \
+  "path:$repo#checks.aarch64-darwin.runtime-unit" \
+  "path:$repo#checks.aarch64-darwin.upstream-copy" \
   2>&1 | tee "$run/offline.log"
-```
-
-The runtime-unit target supplies the pinned Python/TOMLKit and standard tools, the actual generated materialization builder template, and the built shell activation script. Existing test_materialize.py inputs exercise that builder; test_activate.py now checks only config; test_shell_activation.py relocates directly affected preexisting shell failure/lifecycle scenarios. Its fake nix-store tests orchestration only, while integration below checks actual roots. Source sentinel substitution is test fixture wiring, not another copy engine. Expected: both derivations succeed and unittest reports no failures. No separate unittest replay and no blanket full flake check is required. Unchanged graph/MCP normalization assertions retain prior evidence; the two existing unsafe/overlap build-contract assertions moved to Nix are explicitly forced by runtime-unit, so selecting that target covers them without rerunning checks.evaluation.
-
-### T2 and real closure lifecycle: one existing two-example integration
-
-Obtain the environment output (reuse the same cached build from runtime-unit):
-
-```bash
-/workspace/shared/nix-bootstrap/bin/nix build --no-update-lock-file --no-link \
-  --print-out-paths "path:$repo#example" > "$run/environment.txt" 2> "$run/build.log"
+nix build --no-update-lock-file --no-link --print-out-paths \
+  "path:$repo#example" > "$run/environment.txt" 2> "$run/build.log"
 out=$(cat "$run/environment.txt")
+TMPDIR="$run" nix develop --no-update-lock-file "path:$repo" \
+  --command bash tests/integration.sh "$out" 2>&1 | tee "$run/integration.log"
 ```
 
-Run the existing integration in the already approved namespace, with pinned Python provided by the existing devShell:
+Expected: runtime-unit and upstream-copy succeed; the existing integration exits 0 with INTEGRATION_PASS. The integration uses isolated project/HOME/CODEX_HOME, replaces selected preexisting/edited files, preserves siblings/settings, and observes actual GC-root registration/release. No service/model or GC deletion runs. No separate unittest replay or full flake check is required. Untouched graph/MCP results remain reusable by impact analysis.
 
-```bash
-/workspace/shared/nix-bootstrap/bin/run bash -c \
-  'set -euo pipefail; export TMPDIR="$1"; cd "$2"; nix develop --no-update-lock-file "path:$2" --command bash tests/integration.sh "$3"' \
-  bash "$run" "$repo" "$out" 2>&1 | tee "$run/integration.log"
-```
-
-The script creates isolated project/HOME/CODEX_HOME, prepopulates same-name files, checks full replacement and unrelated settings/siblings, edits the selected skill and agent and reapplies, then removes and observes actual roots. Expected exit 0 and its existing INTEGRATION_PASS marker. No agent service/model invocation and no GC deletion. The output path under /nix/store is accessed only inside the approved namespace; do not invent host-store symlinks.
-
-Successful existing remove releases its managed roots. Integration failure fixtures and logs remain for diagnosis; do not delete their state/root links manually or change assertions to get a pass. Existing unittest fixtures are temporary and are cleaned after each case, including failures; their standard assertion/error report is the retained diagnostic output. This plan does not promise retained unit fixture directories or require new collection machinery. A command failure stops its dependent commands. For a confirmed external dependency/network fault, only after its recovery allow at most one additional same-input attempt (two total); keep each attempt log separately; do not rerun product assertion failures without a code/step fix and impact review. No already-passing unrelated checks are repeated.
+Keep failed integration fixtures and logs. Unit fixtures remain ephemeral with ordinary failure output retained. Stop dependent steps on failure; do not change assertions or delete state to seek PASS. A confirmed external dependency failure allows at most one same-input retry after recovery, with a separate log. Product failures require a fix and relevant impact review. Successful remove releases managed roots. The original Linux commands and attempts are preserved under the historical execution section in docs/validation.md; they are auxiliary evidence only.
 
 ## Reporting and failure
 
 Only report actual product/test revisions, goal outcomes (pass, business failure, inconclusive, not run), relevant existing output, reused results and their impact basis. Product assertion failures are not retried to seek a pass or hidden by cleanup. Environment failures are distinguished from product failures. Preserve failed integration fixtures and needed roots; retain ordinary unittest failure reports rather than claiming their temporary directories persist; do not manually erase state to bypass protection. No new collector, JSON proof ledger or upload is required. Any necessary expansion beyond the four goals must return to the parent/user with its concrete reason.
 
-TP2 design/first-gate scope was independently approved; TP2.2 supplies the precise affected entrypoints and commands above for second-gate review without expanding T1–T4. Result review remains not performed. No test PASS is claimed before execution.
+TP2 design/first-gate scope was independently approved; TP2.2 supplies the precise affected entrypoints and commands above for second-gate review without expanding T1–T4. The subsequent third-gate PASS is limited to the recorded historical Linux scope; see test-review.md. Current Darwin acceptance remains pending, with no Darwin run claimed.
 
 TP2.2 revision impact: second-gate findings addressed by forcing existing unsafe/overlap assertions in runtime-unit, restoring the existing generation-switch shell scenario, accurately distinguishing ephemeral unit fixtures from retained integration fixtures, and stating one maximum external retry. T1–T4 scope is unchanged.

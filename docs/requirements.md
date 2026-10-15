@@ -14,7 +14,7 @@ The user approved a separate private RekiDunois/agent-env-nix repository to comb
 - Use fixed Nix runtime paths and actual GC roots. Secrets stay outside Nix store declarations.
 - Reuse pinned upstream code as dependencies. No real consumer migration, producer business fix, general registry/framework, or additional harness implementation.
 
-Intended platforms are aarch64-darwin and x86_64-linux where selected dependencies support them. Current execution/validation status must be reported separately.
+First-round support and acceptance target only aarch64-darwin, per the user clarification on 2026-10-15. Linux support/builds are not delivery or test gates; existing platform code remains unchanged. Historical Linux results are supplementary evidence and cannot substitute for Darwin execution, which remains not run.
 
 ## Canonical implementation plan
 

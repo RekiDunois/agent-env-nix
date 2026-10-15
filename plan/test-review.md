@@ -1,3 +1,7 @@
+# Current platform scope: aarch64-darwin only
+
+2026-10-15 user clarification: first-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or testing gates; existing platform code is unchanged. Prior design and static-code approvals remain valid for unchanged behavior; only platform statements receive this targeted review. Linux execution results and their result-review PASS remain historical supplementary evidence, not Darwin validation. Darwin build/runtime execution has NOT RUN and Darwin acceptance remains pending. This documentation-only addendum passed independent targeted platform review on 2026-10-15; no tests were rerun.
+
 # Current second-gate result: TP2.2
 
 Independent reviewer on 2026-10-15: Second gate PASS; review completeness COMPLETE. Reviewed TP2.2-candidate SHA256 209140a01102593d2c8affc2cbb385ca614a9a68435edcc9d9bf73331d39b70c. The four TP2.1 step findings were closed: explicitly forced original path checks, restored original generation-switch scenario, accurate unit versus integration fixture retention, and a maximum one external retry. No scope expansion; no tests executed by reviewer. The incidental duplicate boolean check output was removed by the implementer. Third gate remains not performed pending execution.

@@ -1,9 +1,9 @@
 # agent-env-nix: narrow shell activation
 
-- Plan revision: v0.6-candidate (2026-10-15). Proposed review status: pending.
+- Plan revision: v0.6 with Darwin-only scope addendum (2026-10-15). The original design approval remains valid for unchanged behavior; the platform-scope adjustment passed independent targeted review on 2026-10-15.
 - Requirement revision: R3. User messages Sentinel_7d746093b3ec81919129b980200cf634 and Sentinel_440c4ba567d88191817540ed750bfa57 approve unconditional skill/agent replacement, Python only for config, and dropping cross-file recovery in favor of reporting failure and rerunning.
 - Target baseline: RekiDunois/agent-env-nix main 3b08c9e652dd8df5f3c1686347ef671476022335. Do not include unmerged PR #2 or modify the six producer repositories.
-- This complete candidate replaces v0.5 for implementation. It claims no approval, execution result, or merge readiness. Target platforms remain x86_64-linux and aarch64-darwin; no new platform execution claim.
+- This complete candidate replaces v0.5 for implementation. It claims no approval, execution result, or merge readiness. First-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or test gates. Existing Linux platform code is retained without a support promise. Darwin execution remains not run; historical Linux results are auxiliary only.
 
 ## 1. Authority and scope
 
@@ -94,7 +94,7 @@ Invariants and representative counterexamples:
 - An unrelated config edit after preflight cannot be overwritten by a stale rendered file; an edited MCP value cannot become implicitly writable through a bookkeeping retry.
 - Simultaneous activations use one project lock; arbitrary editor coordination is not promised.
 
-Intended changes: unconditional skill/agent replacement, standard shell file handling, deletion of cross-file recovery, smaller separated state. Preserved: producer API/graph/overrides, full payload contents, unrelated files/settings, MCP protections, runtime closure retention, existing explicit command and platform scope. Approved changes supersede prior equal/unowned/native-agent preservation and journal guarantees. Prohibited effects: six-repo edits, whole-root cleanup, global writes, formal/live eval, secrets, input changes, new framework.
+Intended changes: unconditional skill/agent replacement, standard shell file handling, deletion of cross-file recovery, smaller separated state. Preserved: producer API/graph/overrides, full payload contents, unrelated files/settings, MCP protections, runtime closure retention, existing explicit command. Platform acceptance is narrowed to aarch64-darwin by the latest user clarification. Approved changes supersede prior equal/unowned/native-agent preservation and journal guarantees. Prohibited effects: six-repo edits, whole-root cleanup, global writes, formal/live eval, secrets, input changes, new framework.
 
 Known user-visible tradeoff: after interruption the project may contain partial new/old files until rerun. There is no all-project atomicity, backup restoration or per-object automatic recovery. This is the approved simplification, not an undisclosed defect. No critical unresolved product impact is intentionally deferred; independent review must assess the bounded MCP bookkeeping and schema conversion before implementation.
 

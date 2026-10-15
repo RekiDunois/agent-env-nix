@@ -1,3 +1,7 @@
+# Current platform scope: aarch64-darwin only
+
+2026-10-15 user clarification: first-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or testing gates; existing platform code is unchanged. Prior design and static-code approvals remain valid for unchanged behavior; only platform statements receive this targeted review. Linux execution results and their result-review PASS remain historical supplementary evidence, not Darwin validation. Darwin build/runtime execution has NOT RUN and Darwin acceptance remains pending. This documentation-only addendum passed independent targeted platform review on 2026-10-15; no tests were rerun.
+
 # R3 shell/config simplification validation
 
 Validated on 2026-10-15 in the existing cloud Linux workspace, with Nix 2.35.3 and unchanged locked inputs. Product baseline: main 3b08c9e652dd8df5f3c1686347ef671476022335. This record describes the implementation candidate published with this change; it does not imply merge approval.
@@ -84,4 +88,55 @@ A real first build caught a source-path context bug; it was fixed with context-p
 - No real workflow repositories or downstream business behavior were tested.
 - File-based config checks cannot validate unavailable managed/cloud/MDM sources or later session overrides. The README states that boundary.
 - File publication uses atomic rename; skill replacement is journaled across an old-tree backup and a new-tree rename. This is not a whole-project transaction.
+
+
+## Historical TP2.2 Linux execution steps (auxiliary evidence only)
+
+The following records the already completed authorized cloud run. These Linux commands are retained for provenance, not prescribed as a current delivery/test gate or a request to rerun. They cannot establish Darwin compatibility.
+
+The parent authorized affected offline verification after independent code review and this step review. Formal Codex eval remains excluded; no model, MCP service, six-producer business test or platform matrix is run. That preparation preceded the recorded execution; current results are in docs/validation.md.
+
+Use the existing official task-local Nix 2.35.3 installation documented at /workspace/shared/nix-bootstrap/README.txt, including its already approved namespace wrapper. No reinstall, security-setting change or lock update. The current candidate root is /workspace/shared/agent-env-nix-simplify. All output and fixture files go in a new /tmp run directory. Example artifacts may use valid Nix caches; changed derivations cannot reuse old activation PASS.
+
+From this cloud shell, prepare once:
+
+```bash
+set -euo pipefail
+repo=/workspace/shared/agent-env-nix-simplify
+run=$(mktemp -d /tmp/agent-env-shell-check.XXXXXX)
+printf 'repo=%s\nrun=%s\nplan=TP2.2\n' "$repo" "$run"
+```
+
+### T1, T3, T4: directly affected existing offline checks
+
+```bash
+/workspace/shared/nix-bootstrap/bin/nix build --no-update-lock-file --no-link -L \
+  "path:$repo#checks.x86_64-linux.runtime-unit" \
+  "path:$repo#checks.x86_64-linux.upstream-copy" \
+  2>&1 | tee "$run/offline.log"
+```
+
+The runtime-unit target supplies the pinned Python/TOMLKit and standard tools, the actual generated materialization builder template, and the built shell activation script. Existing test_materialize.py inputs exercise that builder; test_activate.py now checks only config; test_shell_activation.py relocates directly affected preexisting shell failure/lifecycle scenarios. Its fake nix-store tests orchestration only, while integration below checks actual roots. Source sentinel substitution is test fixture wiring, not another copy engine. Expected: both derivations succeed and unittest reports no failures. No separate unittest replay and no blanket full flake check is required. Unchanged graph/MCP normalization assertions retain prior evidence; the two existing unsafe/overlap build-contract assertions moved to Nix are explicitly forced by runtime-unit, so selecting that target covers them without rerunning checks.evaluation.
+
+### T2 and real closure lifecycle: one existing two-example integration
+
+Obtain the environment output (reuse the same cached build from runtime-unit):
+
+```bash
+/workspace/shared/nix-bootstrap/bin/nix build --no-update-lock-file --no-link \
+  --print-out-paths "path:$repo#example" > "$run/environment.txt" 2> "$run/build.log"
+out=$(cat "$run/environment.txt")
+```
+
+Run the existing integration in the already approved namespace, with pinned Python provided by the existing devShell:
+
+```bash
+/workspace/shared/nix-bootstrap/bin/run bash -c \
+  'set -euo pipefail; export TMPDIR="$1"; cd "$2"; nix develop --no-update-lock-file "path:$2" --command bash tests/integration.sh "$3"' \
+  bash "$run" "$repo" "$out" 2>&1 | tee "$run/integration.log"
+```
+
+The script creates isolated project/HOME/CODEX_HOME, prepopulates same-name files, checks full replacement and unrelated settings/siblings, edits the selected skill and agent and reapplies, then removes and observes actual roots. Expected exit 0 and its existing INTEGRATION_PASS marker. No agent service/model invocation and no GC deletion. The output path under /nix/store is accessed only inside the approved namespace; do not invent host-store symlinks.
+
+Successful existing remove releases its managed roots. Integration failure fixtures and logs remain for diagnosis; do not delete their state/root links manually or change assertions to get a pass. Existing unittest fixtures are temporary and are cleaned after each case, including failures; their standard assertion/error report is the retained diagnostic output. This plan does not promise retained unit fixture directories or require new collection machinery. A command failure stops its dependent commands. For a confirmed external dependency/network fault, only after its recovery allow at most one additional same-input attempt (two total); keep each attempt log separately; do not rerun product assertion failures without a code/step fix and impact review. No already-passing unrelated checks are repeated.
 

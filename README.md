@@ -15,7 +15,6 @@ This repository adds an explicit package/dependency contract, native Codex agent
 With Nix flakes enabled, from this repository:
 
 ```sh
-nix flake check
 nix build .#example
 mkdir -p /absolute/path/to/example-project
 ./result/bin/agent-env apply --project /absolute/path/to/example-project
@@ -24,7 +23,7 @@ mkdir -p /absolute/path/to/example-project
 
 The example combines two root packages with a shared dependency. It copies a complete skill (including a script and hidden support file), installs a native example agent, and registers a fixed-path fetch MCP server configuration. Activation does not start that server or a Codex session. The project must already be trusted by Codex; this tool does not change trust.
 
-Initial output systems are `x86_64-linux` and `aarch64-darwin`. See [validation](docs/validation.md) for the exact checks performed and remaining limits.
+First-round delivery targets only `aarch64-darwin`. Existing Linux outputs remain in code, but Linux support/builds are not delivery or test gates. Darwin build/runtime validation is still pending; prior Linux runs are supplementary evidence only. See [validation](docs/validation.md) for the exact checks performed and remaining limits.
 
 ## Producer package
 
@@ -135,10 +134,11 @@ Registration failure aborts publication. Old roots remain until replacement comp
 
 ## Development
 
+The commands below target an Apple Silicon Mac; they have not been executed for this revision.
+
 ```sh
 nix develop
-nix build .#checks.x86_64-linux.runtime-unit .#checks.x86_64-linux.upstream-copy
-nix flake check
+nix build .#checks.aarch64-darwin.runtime-unit .#checks.aarch64-darwin.upstream-copy
 ```
 
 Tests are local fixtures. They do not migrate consumer repositories, call live MCP services, use credentials, or invoke an AI model. See [requirements](docs/requirements.md), [implementation plan](plan/implementation.md), and [validation](docs/validation.md).
