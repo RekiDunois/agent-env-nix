@@ -1,141 +1,69 @@
-# Shared installation → Codex MCP smoke test
+# 共享安装的 Codex MCP 冒烟测试
 
-Revision: R3 (2026-10-15). Proposed review status: pending.
-Formal test execution: pending user-prepared local environment. This document is the single
-plan and recipe for the separate MCP test PR; it does not reopen PR #1.
+R5（2026-10-15），候选待复核；正式测试待本地执行。
 
-## Requirement and baseline
+## 目标、范围和依据
 
-Test only the existing shared install path producing project configuration,
-followed by real Codex loading it and initializing/discovering its MCP tools.
-Reuse `example-base` plus `example-tools` through `.#example`. No downstream
-producer inventory, business regression, new harness, platform matrix, or
-additional MCP transport is in scope.
+唯一必测项：通过共享库正式安装现有两示例后，真实 Codex 从消费者项目配置启动 fetch MCP，并完成一次最小只读工具调用。复用 `example-base`、`example-tools` 和现有 fixture 解析器；不修改产品、不测试下游业务、不增加平台或 transport 矩阵。
 
-- Product baseline: `3b08c9e652dd8df5f3c1686347ef671476022335` (merged PR #1;
-  current remote main checked on 2026-10-15).
-- Existing 54 Linux checks and two-package build/apply/remove results remain
-  valid: [initial validation](../docs/validation.md). Do not repeat them merely
-  because this recipe or its PR head changes.
-- Fixture recipe: [skills-test-fixtures PR #43](https://github.com/RekiDunois/skills-test-fixtures/pull/43),
-  head `ada38c523e1be64e193fef3669dc4af351a3a68e`,
-  [wiring §7 and §7.2](https://github.com/RekiDunois/skills-test-fixtures/blob/ada38c523e1be64e193fef3669dc4af351a3a68e/docs/codex-opencode-smoke-wiring.md).
-- [PR5 reference recipe](https://github.com/ScholarWorkflow/knowledge-tools/blob/01ae5bea11ef9839aa6fb9cfc230c5de74c450c6/tests/PR5-TEST-RECIPE.md#L214-L246)
-  and [eval mapping](https://github.com/RekiDunois/eval-server/blob/3fdfa9387140cfc2e2aa3af415f85015f79706d2/docs/appserver-migration.md).
-- Scope/evidence rules: [Test Engineer Rule](https://app.notion.com/p/3d80101a85f380d8a8f5ce528141e253)
-  and [Project Consensus](https://app.notion.com/p/3d60101a85f3815a8c43f271f2b4d91d).
+- 产品基线为已合并 PR #1 的 `3b08c9e652dd8df5f3c1686347ef671476022335`。本 PR 只改配方，文档提交变化不要求重建产品或重跑已有 54 项 Linux 检查及两示例验证，结果继续引用 [validation](../docs/validation.md)。
+- 遵守 [Test Engineer Rule](https://app.notion.com/p/3d80101a85f380d8a8f5ce528141e253) 与 [Project Consensus](https://app.notion.com/p/3d60101a85f3815a8c43f271f2b4d91d)。
+- 采用 [fixtures PR43](https://github.com/RekiDunois/skills-test-fixtures/pull/43) 的 `ada38c523e1be64e193fef3669dc4af351a3a68e` 版本：[接线 §7、§7.2](https://github.com/RekiDunois/skills-test-fixtures/blob/ada38c523e1be64e193fef3669dc4af351a3a68e/docs/codex-opencode-smoke-wiring.md)。使用 producer 启动配方，不混入 approval fixture 的冻结 writer/manifest。
 
-## Implementation choice and ownership
+输入为一个仓库及 worktree 外的干净消费者。通过条件是安装生成 fetch 配置，随后既有 adapter 确认同一线程的 fetch 最终 startup 为 ready，且 fetch=fetch 调用 completed、error=null，实际返回非错误结果。仅 HTTP 200、模型自述、配置文件存在或 fixture readiness 不算通过。
 
-Add only this bounded opt-in recipe. `mkAgentPackage`/`mkProject`, the example
-packages, generated MCP configuration, flake lock and runtime code stay unchanged.
-The real example already selects the upstream fetch server with the real override
-`--user-agent=agent-env-nix-example`. Its executable is a fixed Nix store path;
-`runtimePackages` retention does not automatically populate PATH.
+最小请求目标为公开静态文档 `https://www.rfc-editor.org/rfc/rfc2606.txt`，`max_length=200`；只用它证明工具可用，不要求正文内容、解析质量或固定输出格式。网络/模型故障据实记为无法判断，不增加网页业务回归。
 
-The installer owns generating and merging the MCP entry. Codex owns project
-configuration loading, initialization and discovery. The existing eval service
-owns starting the Codex thread. This recipe must not compensate for a product
-failure by writing another MCP command, using a fake server, or starting the
-server directly. A standalone MCP handshake would miss the Codex-loading part
-of the requirement, so it is not the selected alternative.
+## 准备（本地测试工程师执行）
 
-Use fixture model/reasoning defaults before `agent-env apply`. Never copy a
-fixture config over the generated file, or replace its `mcp_servers.fetch` table.
-No new common parser, evidence ledger or service is proposed.
+在已有 `direnv` 工作区的同一个 shell 顺序运行以下代码；用户已负责准备既有 eval，本配方不配置、检查或重启服务。端口按共识从 `direnv exec .` 获取，不要求填写 eval 目录。
 
-## Single required case
+所需现有工具为 Nix、direnv、gh、jq、yq（支持 TOML）、curl 和 Python 3.11+。直接执行正常命令，缺依赖或访问失败时保留实际错误并停止受影响项；不新增权限、来源或环境认证。
 
-Input: one disposable consumer outside this repository and its worktrees,
-installed with the existing two-package example; one existing-eval request.
-
-Expected result: Codex reads that consumer's installed configuration, initializes
-the fetch MCP server, and completes a minimal read-only `fetch.fetch` call to
-`https://www.rfc-editor.org/rfc/rfc2606.txt`, with `max_length=200`. This ordinary
-public static document contains no user data. The single call is connection/tool
-availability evidence using the existing fixture adapter, not a test of fetching
-business content. No content sentinel, extraction accuracy, agent delegation,
-private site, downstream workflow or broader network matrix is tested.
-
-Check the installed `mcp_servers.fetch.command` and `args` using a TOML parser,
-then the actual runtime initialization/discovery evidence from this request.
-The configuration file alone, HTTP 200, top-level `passed`, or model-written
-claims are not runtime success. A server `ready` event alone does not prove the
-required named tool was discovered.
-
-## Local execution requirements
-
-The user prepares the existing local eval environment. This PR does not configure,
-inspect or troubleshoot eval. Run where that existing service normally reads the
-consumer and its Nix store. Use its existing credentials without extracting or
-copying them. Required existing commands are Nix, direnv, jq, yq (TOML input), curl and Python
-3.11+; public network access to the static RFC document is a runtime condition.
-Do not install software, start/restart services or alter credentials/security
-settings as part of this recipe. Let normal commands report an actual missing
-dependency; no separate environment-certification or discovery preflight is added.
-
-Reuse fixture §7.2 directly: in one thread, the final startup status for `fetch`
-is `ready` and a completed `mcpToolCall` for server `fetch`, tool `fetch` has
-`status=completed` and `error=null`. Use the shipped parser and its matching
-contract. Do not combine ready and tool-call events across threads, treat an
-app-scoped ready as thread-scoped, or add a tool-catalog parser. A tool result
-containing an actual server/fetch error does not establish the successful call.
-
-This recipe does not authorize reading the eval global config or trust list.
-Under PR #43, explicit `--sandbox workspace-write --cd` lets the runtime handle
-trust and project loading. Unknown pre-existing trust is not a blocker. Known
-explicit untrusted/projectless/managed-policy restrictions or an actual runtime
-error are handled as observed; never bypass them. Runtime may persist project
-trust, so use only an authorized disposable consumer/service. Do not promise
-that `--ephemeral` makes trust changes temporary.
-
-## Preparation recipe (after review, in the user-prepared local environment)
-
-Run in the selected existing eval environment, from the product checkout. The
-executor supplies the existing configured workspace path and a compatible
-already-built example output, reusing initial validation when applicable. If no
-compatible output exists on this machine, obtain it with
-`EXAMPLE_OUT=$(nix build .#example --no-link --print-out-paths)` from the current
-product checkout. This is setup for this case, not a repeat full regression.
-`FIXTURES` is a checkout of the fixture revision above. These are operational
-inputs, not values to guess or discover by scanning credentials/global config.
+优先复用本地工程师已有的该 fixture revision 资产：若已有 checkout/资产目录，工程师可将 `FIXTURES` 指向它并引用已有准备记录，不让用户另行寻找路径。未指定时，下面代码自动把所需三个文件放入固定版本的共享缓存；只下载缺失文件。缓存是不可变资产，本轮配置、消费者和输出均放在独占 `/tmp` 目录，使用 `config/`、`consumers/`、`output/` 布局。fetch 不依赖 Zotero/Chrome，因此不执行它们的共享资产准备或启动脚本。
 
 ```bash
 set -euo pipefail
-: "${EVAL_WORKSPACE:?existing configured workspace required}"
-: "${EXAMPLE_OUT:?existing compatible example output required}"
-: "${FIXTURES:?fixture checkout required}"
-PRODUCT_SHA=$(git rev-parse HEAD)
-FIXTURE_SHA=$(git -C "$FIXTURES" rev-parse HEAD)
-RUN_ROOT=$(mktemp -d /tmp/agent-env-mcp.XXXXXXXX)
-CONSUMER="$RUN_ROOT/consumer"
-mkdir -p "$CONSUMER/.codex" "$RUN_ROOT/results"
-git -C "$CONSUMER" init -q
-cp "$FIXTURES/configs/codex-consumer.toml" "$CONSUMER/.codex/config.toml"
-printf 'product=%s\nfixtures=%s\nexample=%s\nconsumer=%s\n' \
-  "$PRODUCT_SHA" "$FIXTURE_SHA" "$EXAMPLE_OUT" "$CONSUMER" \
-  > "$RUN_ROOT/results/inputs.txt"
-"$EXAMPLE_OUT/bin/agent-env" apply --project "$CONSUMER" \
-  > "$RUN_ROOT/results/apply.stdout" 2> "$RUN_ROOT/results/apply.stderr"
-yq -p=toml -o=json '.' "$CONSUMER/.codex/config.toml" | jq -e '
-  (.mcp_servers.fetch.command | startswith("/nix/store/")) and
-  .mcp_servers.fetch.args == ["--user-agent=agent-env-nix-example"]
-' > "$RUN_ROOT/results/config-check.json"
-EVAL_PORT=$(direnv exec "$EVAL_WORKSPACE" sh -c 'printf "%s" "$EVAL_PORT"')
+EVAL_PORT=$(direnv exec . sh -c 'printf "%s" "$EVAL_PORT"')
 test -n "$EVAL_PORT"
+PRODUCT_SHA=3b08c9e652dd8df5f3c1686347ef671476022335
+FIXTURE_SHA=ada38c523e1be64e193fef3669dc4af351a3a68e
+RUN_ROOT=$(mktemp -d /tmp/agent-env-mcp.XXXXXXXX)
+CONSUMER="$RUN_ROOT/consumers/example"
+mkdir -p "$RUN_ROOT/config" "$RUN_ROOT/output" "$CONSUMER/.codex"
+if [ -z "${FIXTURES:-}" ]; then
+  FIXTURES="${XDG_CACHE_HOME:-$HOME/.cache}/agent-env-nix/skills-test-fixtures/$FIXTURE_SHA"
+  mkdir -p "$FIXTURES/configs" "$FIXTURES/scripts"
+  for file in configs/codex-consumer.toml \
+    configs/codex-eval-adapter-contract.json \
+    scripts/parse_codex_eval_evidence.py; do
+    if [ ! -f "$FIXTURES/$file" ]; then
+      gh api -H 'Accept: application/vnd.github.raw+json' \
+        "repos/RekiDunois/skills-test-fixtures/contents/$file?ref=$FIXTURE_SHA" \
+        > "$RUN_ROOT/config/fixture-download"
+      mv "$RUN_ROOT/config/fixture-download" "$FIXTURES/$file"
+    fi
+  done
+fi
+EXAMPLE_OUT=$(nix build "github:RekiDunois/agent-env-nix/$PRODUCT_SHA#example" \
+  --no-link --print-out-paths 2> "$RUN_ROOT/output/build.stderr")
+cp "$FIXTURES/configs/codex-consumer.toml" "$CONSUMER/.codex/config.toml"
+"$EXAMPLE_OUT/bin/agent-env" apply --project "$CONSUMER" \
+  > "$RUN_ROOT/output/apply.stdout" 2> "$RUN_ROOT/output/apply.stderr"
+yq -p=toml -o=json '.mcp_servers.fetch' "$CONSUMER/.codex/config.toml" \
+  > "$RUN_ROOT/output/installed-fetch.json"
+printf 'product=%s\nfixtures=%s\nfixture_path=%s\nexample=%s\nconsumer=%s\n' \
+  "$PRODUCT_SHA" "$FIXTURE_SHA" "$FIXTURES" "$EXAMPLE_OUT" "$CONSUMER" \
+  > "$RUN_ROOT/output/inputs.txt"
 ```
 
-The template's historical pretrust comment does not supersede PR #43 §7.
-Do not use `tests/integration.sh` as this live setup: its intentionally invalid
-model/unrelated fake MCP and redirected HOME/CODEX_HOME are offline fixtures.
-Do not copy those settings into this case. The fixture model and reasoning are
-runtime inputs, not product acceptance conditions. No model/reasoning/MCP/environment/
-approval CLI override is added.
+从安装输出确认 apply 成功，并查看 `installed-fetch.json` 中正式生成的 Nix store `command` 和示例参数 `--user-agent=agent-env-nix-example`。先复制 fixture 的模型配置再 apply，不能用通用模板覆盖生成的 MCP。gpt-6-luna/low 是运行输入，不是本产品验收门槛。
 
-## Request recipe
+以上是首次准备；Nix 自动复用有效输出。后续仅修订配方或记录时，保留仍有效的资产、构建及消费者，引用原准备记录，不从头安装。若实际安装错误，修产品或正式安装入口，不手工补 MCP entry。不要使用离线 `tests/integration.sh` 的假模型、假 MCP、HOME/CODEX_HOME 设置。
 
-The prompt requests one minimal native MCP call. It is not itself evidence.
-Do not use shell, curl or another tool to substitute for the installed MCP call.
+## 一次真实请求
+
+沿用 §7 的显式 sandbox/cd 和逐参数编码。模型、推理、MCP及环境设置来自项目配置；不查 eval 全局配置/trust 表、不手工修改 trust，也不直接执行 Codex。runtime 可能持久化此测试消费者的 trust；`--ephemeral` 不保证 trust 临时化。实际 untrusted、managed-policy 或加载错误据实处理，不绕过。
 
 ```bash
 PROMPT='Use the configured fetch MCP server to call its fetch tool once with url https://www.rfc-editor.org/rfc/rfc2606.txt and max_length 200. Do not use shell commands, browse with another tool, read project files, edit files, delegate, or call any other MCP tool. If the MCP call is unavailable or fails, report that and stop without retrying.'
@@ -143,72 +71,40 @@ set -- --json --ephemeral --skip-git-repo-check \
   --sandbox workspace-write --cd "$CONSUMER" -- "$PROMPT"
 COMMAND=$(jq -rRn --args '$ARGS.positional | map(@sh) | join(" ")' -- "$@")
 jq -n --arg command "$COMMAND" '{command:$command,timeout:300}' \
-  > "$RUN_ROOT/request.json"
+  > "$RUN_ROOT/config/request.json"
 set +e
 curl --silent --show-error --max-time 330 \
   --header 'Content-Type: application/json' \
-  --data-binary "@$RUN_ROOT/request.json" \
-  --output "$RUN_ROOT/response.json" --write-out '%{http_code}' \
-  "http://127.0.0.1:$EVAL_PORT/eval" > "$RUN_ROOT/results/http.txt" \
-  2> "$RUN_ROOT/results/curl.stderr"
+  --data-binary "@$RUN_ROOT/config/request.json" \
+  --output "$RUN_ROOT/output/response.json" --write-out '%{http_code}' \
+  "http://127.0.0.1:$EVAL_PORT/eval" > "$RUN_ROOT/output/http.txt" \
+  2> "$RUN_ROOT/output/curl.stderr"
 CURL_EXIT=$?
 set -e
-printf '%s\n' "$CURL_EXIT" > "$RUN_ROOT/results/curl.exit"
+printf '%s\n' "$CURL_EXIT" > "$RUN_ROOT/output/curl.exit"
 ```
 
-`COMMAND` is arguments for the existing eval API, not an executable shell
-command. No direct `codex` invocation, new eval service, profile fallback,
-manual trust edit, or attempt to bypass a runtime denial is allowed.
-
-## Existing fixture adapter and inspection
-
-Only after transport succeeds and HTTP status is 200, consume the response with
-its existing adapter (no custom parser, replay suite or new schema):
+传输成功且 HTTP 为 200 后，直接消费已有 adapter，不重写字段解析或构建另一套判定器：
 
 ```bash
 test "$CURL_EXIT" -eq 0
-test "$(cat "$RUN_ROOT/results/http.txt")" = 200
+test "$(cat "$RUN_ROOT/output/http.txt")" = 200
 python3 "$FIXTURES/scripts/parse_codex_eval_evidence.py" \
   --contract "$FIXTURES/configs/codex-eval-adapter-contract.json" \
-  --eval-response "$RUN_ROOT/response.json" \
+  --eval-response "$RUN_ROOT/output/response.json" \
   --expected-mcp-server fetch --expected-mcp-tool fetch=fetch \
-  --output "$RUN_ROOT/results/mcp-evidence.json"
-jq '{fixture_status, mcp_observation, problems}' \
-  "$RUN_ROOT/results/mcp-evidence.json"
+  --output "$RUN_ROOT/output/mcp-evidence.json"
+jq '{fixture_status, mcp_observation, problems}' "$RUN_ROOT/output/mcp-evidence.json"
+jq '{version, termination_reason: .output.termination_reason}' \
+  "$RUN_ROOT/output/response.json"
 ```
 
-Inspect the adapter's same-thread `success_thread_ids`/`threads` evidence and the
-actual matched call arguments/result. Confirm the requested public URL was used
-and the result is not an MCP/server error. Do not require exact page text or a
-fixed output schema for the fetched document. The shared-installation result is passed only
-when the installed configuration check and the bounded successful native MCP
-observation both hold. Fixture readiness alone is not the shared-installation verdict.
-A prompt requests one call; follow fixture §7.2's existing count semantics rather
-than adding an exact-count test gate. Do not issue another eval to seek success.
+采用 adapter 的同线程 `success_thread_ids`/`threads` 结果，查看对应调用的 URL 和非错误结果。不能把其他线程或 app-scoped 的 ready 拼成通过。沿用 §7.2 的计数语义，不另设恰好一次的验收门；不再次发送 eval 寻找成功。
 
-## Results, failure and cleanup
+## 结果和结束
 
-Use four outcomes: passed, product failure, unable to judge, not run. Record
-actual product/fixture revision, commands, response version, necessary runtime
-output and the result. Keep response/private paths outside Git; commit only a
-short sanitized result. Do not publish model prose as discovery evidence.
+仅记录当前产品/配方/fixture 版本、实际命令、Codex 响应版本、必要输出和通过／业务失败／无法判断／未执行。旧检查直接引用；私有路径、实际配置和原始响应留在本轮目录，不提交 Git。当前结果为**未执行，待本地测试工程师运行**。
 
-An actual installation-generated command/configuration defect is a product
-failure when supported by its output, including an incorrect generated executable
-path or MCP entry that prevents loading or initialization. Service, provider or
-model failure is unable to judge. A filesystem mismatch or missing required MCP
-observation is unable to judge only when caused by the external execution or
-observation environment; do not use that label to hide a demonstrated shared
-installation defect. If the cause remains unclear, record the actual failure
-and what is unresolved without assigning an unsupported product verdict.
-Automatic retries: zero. Preserve any attempt; change a faulty recipe before
-another approved attempt, and never sample repeatedly to seek a pass.
+自动重试为零。服务、网络、provider、模型或外部观察故障记为无法判断；已证明的安装生成错误（如错误的 MCP command/entry）记为产品失败，不能用外部环境标签掩盖。原因不明则保留错误及未决点，不臆断产品回归。步骤确有错误时先修订确认，原尝试保留。
 
-Once the request is terminal, release only this consumer's owned installation
-using `"$EXAMPLE_OUT/bin/agent-env" remove --project "$CONSUMER"`; retain the
-run directory for result review. Do not run GC, delete global trust, or change
-service credentials/configuration. A timeout leaves runtime completion uncertain;
-report it before cleanup rather than removing paths an active thread may use.
-
-Current result: pending local execution; no formal test has been run. First/second/third test gates remain pending as
-applicable; this candidate does not assert runtime compatibility or merge readiness.
+请求已终止后用 `"$EXAMPLE_OUT/bin/agent-env" remove --project "$CONSUMER"` 释放本消费者的安装和 GC root，保留运行记录及共享资产。若传输超时、运行是否终止不明，先报告并保留消费者；不删除仍可能使用的路径、不停止服务、不修改全局 trust、不运行 GC。
