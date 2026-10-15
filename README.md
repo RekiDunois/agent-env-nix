@@ -23,7 +23,7 @@ mkdir -p /absolute/path/to/example-project
 
 The example combines two root packages with a shared dependency. It copies a complete skill (including a script and hidden support file), installs a native example agent, and registers a fixed-path fetch MCP server configuration. Activation does not start that server or a Codex session. The project must already be trusted by Codex; this tool does not change trust.
 
-First-round delivery targets only `aarch64-darwin`. Existing Linux outputs remain in code, but Linux support/builds are not delivery or test gates. Darwin build/runtime validation is still pending; prior Linux runs are supplementary evidence only. See [validation](docs/validation.md) for the exact checks performed and remaining limits.
+First-round delivery targets only `aarch64-darwin`. Existing Linux outputs remain in code, but Linux support/builds are not delivery or test gates. The approved T1–T4 Darwin build/runtime checks passed on an Apple Silicon Mac on 2026-10-16 (runtime-unit 38/38, upstream-copy, example build and two-example integration); third-gate test-result review is PASS. Prior Linux runs remain supplementary evidence only. See [validation](docs/validation.md) and [test review](plan/test-review.md) for the exact scope, results and exclusions.
 
 ## Producer package
 
