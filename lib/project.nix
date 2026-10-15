@@ -73,6 +73,31 @@ let
     targets.codex = { enable = true; dest = "skills"; structure = "copy-tree"; };
   };
   python = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
+  activation = pkgs.writeText "${name}-activate.sh" (''
+    environment=@AGENT_ENV_OUTPUT@
+    manifest=@AGENT_ENV_OUTPUT@/manifest.json
+    config_helper=@AGENT_ENV_OUTPUT@/lib/config.py
+    python_bin=${python}/bin/python
+    nix_store=${pkgs.nix}/bin/nix-store
+    skills_installer=${skillsInstaller}/bin/agent-env-stage-skills
+    copy_current() {
+      ${lib.concatStringsSep "\n" (lib.mapAttrsToList (skillName: _: ''
+        safe_path "$project/.agents/skills"
+        mkdir -p -- "$project/.agents/skills"
+        remove_leaf "$project/.agents/skills" ${lib.escapeShellArg skillName}
+        cp -a -- "$work/upstream/skills/${skillName}" "$project/.agents/skills/${skillName}"
+        chmod -R u+w -- "$project/.agents/skills/${skillName}"
+      '') skills)}
+      ${lib.concatStringsSep "\n" (lib.mapAttrsToList (agentName: record: ''
+        safe_path "$project/.codex/agents"
+        mkdir -p -- "$project/.codex/agents"
+        remove_leaf "$project/.codex/agents" ${lib.escapeShellArg "${agentName}.toml"}
+        cp -- ${lib.escapeShellArg record.source} "$project/.codex/agents/${agentName}.toml"
+        chmod u+w -- "$project/.codex/agents/${agentName}.toml"
+      '') agents)}
+      :
+    }
+  '' + builtins.readFile ../runtime/activate.sh);
   manifest = pkgs.writeText "${name}-manifest.json" (builtins.toJSON {
     schemaVersion = 1;
     environment = "@AGENT_ENV_OUTPUT@";
@@ -97,8 +122,11 @@ builtins.deepSeq (builtins.attrNames skills ++ builtins.attrNames agents ++ buil
     };
   } ''
     mkdir -p "$out/bin" "$out/lib"
-    cp ${../runtime/activate.py} "$out/lib/activate.py"
+    cp ${../runtime/config.py} "$out/lib/config.py"
+    substitute ${activation} "$out/lib/activate.sh" --replace-fail '@AGENT_ENV_OUTPUT@' "$out"
     substitute ${manifest} "$out/manifest.json" --replace-fail '@AGENT_ENV_OUTPUT@' "$out"
-    makeWrapper ${python}/bin/python "$out/bin/agent-env" \
-      --add-flags "$out/lib/activate.py --manifest $out/manifest.json"
+    makeWrapper ${pkgs.bash}/bin/bash "$out/bin/agent-env" \
+      --prefix PATH : ${lib.makeBinPath [ pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.jq pkgs.flock ]} \
+      --add-flags "$out/lib/activate.sh"
   '')
+
