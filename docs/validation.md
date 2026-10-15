@@ -1,12 +1,27 @@
 # Current platform scope: aarch64-darwin only
 
-2026-10-15 user clarification: first-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or testing gates; existing platform code is unchanged. Prior design and static-code approvals remain valid for unchanged behavior; only platform statements receive this targeted review. Linux execution results and their result-review PASS remain historical supplementary evidence, not Darwin validation. Darwin build/runtime execution has NOT RUN and Darwin acceptance remains pending. This documentation-only addendum passed independent targeted platform review on 2026-10-15; no tests were rerun.
+2026-10-15 user clarification: first-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or testing gates; existing platform code is unchanged. Prior design and static-code approvals remain valid for unchanged behavior; only platform statements receive this targeted review. Linux execution results and their result-review PASS remain historical supplementary evidence, not Darwin validation. The authorized Darwin build/runtime execution is recorded below. This documentation-only addendum passed independent targeted platform review on 2026-10-15; no tests were rerun for that addendum.
 
 # R3 shell/config simplification validation
 
+## Current Darwin execution (2026-10-16)
+
+Product revision: `d8629ecb9e89b6c22468d47cff0a7502e60327c4`. Host: Apple Silicon (`arm64`), Nix 2.34.8. The approved TP2.2-candidate steps in `plan/test-plan.md` ran without lock updates.
+
+The first invocation stopped while Nix was reading the local flake because the sandbox exposed the default fetcher-cache database as read-only. No derivations or test cases started. The same plan was then run with the user's explicit elevated authorization and `NIX_CACHE_HOME="$run/nix-cache"`; the cache stayed inside the temporary run directory. The first invocation's captured diagnostic is recorded in `offline-initial-cache-failure.txt` as an excerpt, not as a raw full log.
+
+- T1: PASS. `checks.aarch64-darwin.runtime-unit` passed all 38 tests; `checks.aarch64-darwin.upstream-copy` succeeded.
+- T2: PASS. The existing two-example integration printed `INTEGRATION_PASS`; its assertions verified replacement, stale export cleanup, preservation of unrelated files/settings, and clean removal.
+- T3: PASS. The relevant existing config-protection cases ran within the passing `runtime-unit` check.
+- T4: PASS. The relevant unsafe-path, interrupted-copy/rerun, root-registration failure, legacy-state, generation-switch, and real GC-root lifecycle assertions passed. Integration confirmed the owned root was released after remove. No garbage-collection deletion was run.
+
+The example environment built at `/nix/store/nig81jx9788pnphhcmzv301bcx798g1a-agent-environment`. The actual commands were the three current aarch64-darwin commands in `plan/test-plan.md`, with `export NIX_CACHE_HOME="$run/nix-cache"` before them. The complete run directory is `/var/folders/1y/9709mm1s6115w3fbssy9162h0000gn/T//agent-env-shell-check.FMhwRA`; it contains `offline.log`, `build.log`, `environment.txt`, `integration.log`, and the initial cache-failure diagnostic excerpt. No standalone unittest replay, full flake check, Linux run, or platform matrix was performed.
+
+These results cover execution only. Independent third-gate review of this Darwin result has not yet been recorded.
+
 Validated on 2026-10-15 in the existing cloud Linux workspace, with Nix 2.35.3 and unchanged locked inputs. Product baseline: main 3b08c9e652dd8df5f3c1686347ef671476022335. This record describes the implementation candidate published with this change; it does not imply merge approval.
 
-## Current scoped results
+## Historical TP2.2 Linux scoped results
 
 - T1: PASS. Standard-tool payload builder checks cover complete files, dotfiles, empty directories, executable bits and internal-link materialization, with the existing source-boundary failures. The original unsafe/overlap destination assertions are forced by runtime-unit. The real pinned upstream copy-tree check passed.
 - T2: PASS. The existing two-example integration replaced preexisting same-name skill/agent content, removed stale content inside the selected skill, replaced direct edits on repeat apply, and removed recorded exports while retaining unrelated settings/comments/MCP and sibling skill.
