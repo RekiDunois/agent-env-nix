@@ -17,7 +17,7 @@ The first invocation stopped while Nix was reading the local flake because the s
 
 The example environment built at `/nix/store/nig81jx9788pnphhcmzv301bcx798g1a-agent-environment`. The actual commands were the three current aarch64-darwin commands in `plan/test-plan.md`, with `export NIX_CACHE_HOME="$run/nix-cache"` before them. The complete run directory is `/var/folders/1y/9709mm1s6115w3fbssy9162h0000gn/T//agent-env-shell-check.FMhwRA`; it contains `offline.log`, `build.log`, `environment.txt`, `integration.log`, and the initial cache-failure diagnostic excerpt. No standalone unittest replay, full flake check, Linux run, or platform matrix was performed.
 
-These results cover execution only. Independent third-gate review of this Darwin result has not yet been recorded.
+These results are the authorized execution record. The third-gate result review on 2026-10-16 accepted T1–T4 as PASS for the recorded Darwin product revision; see [test review](../plan/test-review.md). No tests were rerun for this result review, and it is not merge approval.
 
 Validated on 2026-10-15 in the existing cloud Linux workspace, with Nix 2.35.3 and unchanged locked inputs. Product baseline: main 3b08c9e652dd8df5f3c1686347ef671476022335. This record describes the implementation candidate published with this change; it does not imply merge approval.
 
@@ -39,10 +39,10 @@ The fixtures now use the absolute Bash supplied by runtime-unit. Independent sec
 
 Commands are the exact TP2.2 steps in [test plan](../plan/test-plan.md), with only runtime-unit selected for the fixture correction rerun. Local output directory: /tmp/agent-env-shell-check.OobkKE; logs offline.log, offline-authorized.log, offline-fixture-fixed.log, build.log and integration.log. These are ordinary local execution outputs, not committed raw artifacts. The integration fixture remained under that output directory and successful remove released its managed root.
 
-## Limits
+## Historical Linux run limits
 
-- No formal Codex eval, model invocation, live MCP service, real consumer migration, six-producer regression or user Mac operation.
-- No Darwin build/runtime execution; the Linux pass does not imply macOS runtime compatibility.
+- The historical Linux run did not include formal Codex eval, model invocation, live MCP service, real consumer migration, six-producer regression or a user Mac operation. The later Mac run is recorded above.
+- At the time of the historical Linux run, Darwin build/runtime verification had not occurred. The later 2026-10-16 Darwin result is recorded above.
 - No whole-project atomicity or cross-file recovery: failure can leave partial selected files until rerun.
 - The config snapshot guard protects observed changes; the existing narrow compare/replace race with arbitrary external editors remains.
 - Prior tests below are historical and apply only where their behavior remains unaffected.
