@@ -14,7 +14,7 @@ The user approved a separate private RekiDunois/agent-env-nix repository to comb
 - Use fixed Nix runtime paths and actual GC roots. Secrets stay outside Nix store declarations.
 - Reuse pinned upstream code as dependencies. No real consumer migration, producer business fix, general registry/framework, or additional harness implementation.
 
-First-round support and acceptance target only aarch64-darwin, per the user clarification on 2026-10-15. Linux support/builds are not delivery or test gates; existing platform code remains unchanged. Historical Linux results are supplementary evidence and cannot substitute for Darwin execution, which remains not run.
+First-round support and acceptance target only aarch64-darwin, per the user clarification on 2026-10-15. Linux support/builds are not delivery or test gates; existing platform code remains unchanged. Historical Linux results are supplementary evidence. On 2026-10-16 the authorized Apple Silicon Mac run passed the approved T1–T4 checks (runtime-unit 38/38, upstream-copy, example build and two-example integration); third-gate result review is PASS for that scoped Darwin evidence. See [validation](validation.md) and [test review](../plan/test-review.md). This is not a merge approval.
 
 ## Canonical implementation plan
 
