@@ -1,3 +1,9 @@
+# Targeted integration path preparation review, 2026-10-15
+
+Addresses [review comment 6199828186](https://github.com/RekiDunois/agent-env-nix/pull/3#issuecomment-6199828186) against d33b35bf0319be0320a3eca64165da30ef307fca. Immediately after mktemp, tests/integration.sh now canonicalizes its existing temporary directory with `base=$(cd "$base" && pwd -P)`. HOME, CODEX_HOME, project and the GC-root assertion then use the same physical path, avoiding false failures from macOS /var versus /private/var aliases.
+
+Independent targeted static review of path preparation: PASS. The reviewer read the full integration script; the subshell does not change the caller's working directory, and failure still stops execution under set -e. This is one fixture-preparation line, with no product change, new test, changed assertion or expansion of T1–T4. Unaffected reviews and historical Linux evidence remain reusable. No tests were run or rerun for this correction. aarch64-darwin build/runtime acceptance remains NOT RUN; this is not a test-result PASS or merge approval.
+
 # Current platform scope: aarch64-darwin only
 
 2026-10-15 user clarification: first-round support and acceptance target only aarch64-darwin. Linux support/builds are not delivery or testing gates; existing platform code is unchanged. Prior design and static-code approvals remain valid for unchanged behavior; only platform statements receive this targeted review. Linux execution results and their result-review PASS remain historical supplementary evidence, not Darwin validation. Darwin build/runtime execution has NOT RUN and Darwin acceptance remains pending. This documentation-only addendum passed independent targeted platform review on 2026-10-15; no tests were rerun.

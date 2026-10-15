@@ -2,6 +2,7 @@
 set -euo pipefail
 environment="$1"
 base=$(mktemp -d "${TMPDIR:-/tmp}/agent-env-integration.XXXXXX")
+base=$(cd "$base" && pwd -P)
 export HOME="$base/home"
 export CODEX_HOME="$HOME/.codex"
 project="$base/project"
