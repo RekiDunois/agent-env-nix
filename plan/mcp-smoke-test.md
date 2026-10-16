@@ -1,6 +1,6 @@
 # 共享安装的 Codex MCP 冒烟测试
 
-R6（2026-10-16），候选待复核。第一关范围复用 R5；非临时会话、审批配置及其直接影响的第二关步骤待复核；第三关未执行。
+R7（2026-10-16），候选待复核。第一关范围复用 R5；非临时会话、审批配置及其直接影响的第二关步骤仍待复核；第三关已执行并通过。
 
 ## 目标、范围和依据
 
@@ -20,6 +20,8 @@ R6（2026-10-16），候选待复核。第一关范围复用 R5；非临时会�
 
 所需现有工具为 Nix、direnv、gh、jq、yq（支持 TOML）、curl 和 Python 3.11+。直接执行正常命令，缺依赖或访问失败时保留实际错误并停止受影响项；不新增权限、来源或环境认证。
 
+macOS 的 `/tmp` 会解析到 `/private/tmp`。临时根目录使用物理路径；若 shell 已有 `CODEX_HOME`，仅在本地 `agent-env apply` 子进程中将同一目录转成物理路径，避免安装器把 `/tmp` 软链接判为不安全。不要改指其他目录；这不改变 eval 服务或请求环境。
+
 优先复用本地工程师已有的该 fixture revision 资产：若已有 checkout/资产目录，工程师可将 `FIXTURES` 指向它并引用已有准备记录，不让用户另行寻找路径。未指定时，下面代码自动把所需三个文件放入固定版本的共享缓存；只下载缺失文件。缓存是不可变资产，本轮配置、消费者和输出均放在独占 `/tmp` 目录，使用 `config/`、`consumers/`、`output/` 布局。fetch 不依赖 Zotero/Chrome，因此不执行它们的共享资产准备或启动脚本。
 
 ```bash
@@ -29,6 +31,7 @@ test -n "$EVAL_PORT"
 PRODUCT_SHA=3b08c9e652dd8df5f3c1686347ef671476022335
 FIXTURE_SHA=ada38c523e1be64e193fef3669dc4af351a3a68e
 RUN_ROOT=$(mktemp -d /tmp/agent-env-mcp.XXXXXXXX)
+RUN_ROOT=$(cd -P "$RUN_ROOT" && pwd -P)
 CONSUMER="$RUN_ROOT/consumers/example"
 mkdir -p "$RUN_ROOT/config" "$RUN_ROOT/output" "$CONSUMER/.codex"
 if [ -z "${FIXTURES:-}" ]; then
@@ -48,8 +51,13 @@ fi
 EXAMPLE_OUT=$(nix build "github:RekiDunois/agent-env-nix/$PRODUCT_SHA#example" \
   --no-link --print-out-paths 2> "$RUN_ROOT/output/build.stderr")
 cp "$FIXTURES/configs/codex-approval-consumer.toml" "$CONSUMER/.codex/config.toml"
-"$EXAMPLE_OUT/bin/agent-env" apply --project "$CONSUMER" \
-  > "$RUN_ROOT/output/apply.stdout" 2> "$RUN_ROOT/output/apply.stderr"
+(
+  if [ -n "${CODEX_HOME:-}" ]; then
+    CODEX_HOME=$(cd -P "$CODEX_HOME" && pwd -P)
+    export CODEX_HOME
+  fi
+  "$EXAMPLE_OUT/bin/agent-env" apply --project "$CONSUMER"
+) > "$RUN_ROOT/output/apply.stdout" 2> "$RUN_ROOT/output/apply.stderr"
 yq -p=toml -o=json '.mcp_servers.fetch' "$CONSUMER/.codex/config.toml" \
   > "$RUN_ROOT/output/installed-fetch.json"
 printf 'product=%s\nfixtures=%s\nfixture_path=%s\nexample=%s\nconsumer=%s\n' \
@@ -105,7 +113,9 @@ jq '{version, termination_reason: .output.termination_reason}' \
 
 ## 结果和结束
 
-仅记录当前产品/配方/fixture 版本、实际命令、Codex 响应版本、必要输出和通过／业务失败／无法判断／未执行。旧检查直接引用；私有路径、实际配置和原始响应留在本轮目录，不提交 Git。当前结果为**未执行，待本地测试工程师运行**。
+仅记录当前产品/配方/fixture 版本、实际命令、Codex 响应版本、必要输出和通过／业务失败／无法判断／未执行。旧检查直接引用；私有路径、实际配置和原始响应留在本轮目录，不提交 Git。
+
+R7 本轮结果：**通过**。产品 SHA 为 `3b08c9e652dd8df5f3c1686347ef671476022335`，fixture SHA 为 `ada38c523e1be64e193fef3669dc4af351a3a68e`。Codex 响应版本为 `codex-cli 0.162.0-alpha.17.2`；实际命令与 prompt 使用本节的一次请求配方，未传 `--ephemeral` 或模型 CLI override。curl exit 为 0、HTTP 为 200，响应 termination 为 `completed`。既有 adapter 输出 `fixture_status=FIXTURE_READY`；同一线程 fetch 最终 startup 为 `ready`，`fetch=fetch` 调用 completed 1 次、`error=null`，返回非错误文本内容。macOS 物理路径规范化后，正式安装成功。完整请求、响应及临时配置仅保存在本轮外部临时目录，不提交 Git。
 
 自动重试为零。服务、网络、provider、模型或外部观察故障记为无法判断；已证明的安装生成错误（如错误的 MCP command/entry）记为产品失败，不能用外部环境标签掩盖。原因不明则保留错误及未决点，不臆断产品回归。步骤确有错误时先修订确认，原尝试保留。
 
