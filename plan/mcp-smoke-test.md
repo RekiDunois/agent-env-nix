@@ -1,6 +1,6 @@
 # 共享安装的 Codex MCP 冒烟测试
 
-R5（2026-10-15），候选待复核；正式测试待本地执行。
+R6（2026-10-16），候选待复核。第一关范围复用 R5；非临时会话、审批配置及其直接影响的第二关步骤待复核；第三关未执行。
 
 ## 目标、范围和依据
 
@@ -8,7 +8,7 @@ R5（2026-10-15），候选待复核；正式测试待本地执行。
 
 - 产品基线为已合并 PR #1 的 `3b08c9e652dd8df5f3c1686347ef671476022335`。本 PR 只改配方，文档提交变化不要求重建产品或重跑已有 54 项 Linux 检查及两示例验证，结果继续引用 [validation](../docs/validation.md)。
 - 遵守 [Test Engineer Rule](https://app.notion.com/p/3d80101a85f380d8a8f5ce528141e253) 与 [Project Consensus](https://app.notion.com/p/3d60101a85f3815a8c43f271f2b4d91d)。
-- 采用 [fixtures PR43](https://github.com/RekiDunois/skills-test-fixtures/pull/43) 的 `ada38c523e1be64e193fef3669dc4af351a3a68e` 版本：[接线 §7、§7.2](https://github.com/RekiDunois/skills-test-fixtures/blob/ada38c523e1be64e193fef3669dc4af351a3a68e/docs/codex-opencode-smoke-wiring.md)。使用 producer 启动配方，不混入 approval fixture 的冻结 writer/manifest。
+- 采用 [fixtures PR43](https://github.com/RekiDunois/skills-test-fixtures/pull/43) 的 `ada38c523e1be64e193fef3669dc4af351a3a68e` 版本：[接线 §7、§7.2](https://github.com/RekiDunois/skills-test-fixtures/blob/ada38c523e1be64e193fef3669dc4af351a3a68e/docs/codex-opencode-smoke-wiring.md)。使用 producer 启动配方；按用户本轮要求去掉 `--ephemeral`，并使用同版本的 [审批配置模板](https://github.com/RekiDunois/skills-test-fixtures/blob/ada38c523e1be64e193fef3669dc4af351a3a68e/configs/codex-approval-consumer.toml)。仅复用模板的运行配置，不引入 approval fixture 的冻结 writer、manifest 或审批探针。
 
 输入为一个仓库及 worktree 外的干净消费者。通过条件是安装生成 fetch 配置，随后既有 adapter 确认同一线程的 fetch 最终 startup 为 ready，且 fetch=fetch 调用 completed、error=null，实际返回非错误结果。仅 HTTP 200、模型自述、配置文件存在或 fixture readiness 不算通过。
 
@@ -34,7 +34,7 @@ mkdir -p "$RUN_ROOT/config" "$RUN_ROOT/output" "$CONSUMER/.codex"
 if [ -z "${FIXTURES:-}" ]; then
   FIXTURES="${XDG_CACHE_HOME:-$HOME/.cache}/agent-env-nix/skills-test-fixtures/$FIXTURE_SHA"
   mkdir -p "$FIXTURES/configs" "$FIXTURES/scripts"
-  for file in configs/codex-consumer.toml \
+  for file in configs/codex-approval-consumer.toml \
     configs/codex-eval-adapter-contract.json \
     scripts/parse_codex_eval_evidence.py; do
     if [ ! -f "$FIXTURES/$file" ]; then
@@ -47,7 +47,7 @@ if [ -z "${FIXTURES:-}" ]; then
 fi
 EXAMPLE_OUT=$(nix build "github:RekiDunois/agent-env-nix/$PRODUCT_SHA#example" \
   --no-link --print-out-paths 2> "$RUN_ROOT/output/build.stderr")
-cp "$FIXTURES/configs/codex-consumer.toml" "$CONSUMER/.codex/config.toml"
+cp "$FIXTURES/configs/codex-approval-consumer.toml" "$CONSUMER/.codex/config.toml"
 "$EXAMPLE_OUT/bin/agent-env" apply --project "$CONSUMER" \
   > "$RUN_ROOT/output/apply.stdout" 2> "$RUN_ROOT/output/apply.stderr"
 yq -p=toml -o=json '.mcp_servers.fetch' "$CONSUMER/.codex/config.toml" \
@@ -57,17 +57,19 @@ printf 'product=%s\nfixtures=%s\nfixture_path=%s\nexample=%s\nconsumer=%s\n' \
   > "$RUN_ROOT/output/inputs.txt"
 ```
 
-从安装输出确认 apply 成功，并查看 `installed-fetch.json` 中正式生成的 Nix store `command` 和示例参数 `--user-agent=agent-env-nix-example`。先复制 fixture 的模型配置再 apply，不能用通用模板覆盖生成的 MCP。gpt-6-luna/low 是运行输入，不是本产品验收门槛。
+从安装输出确认 apply 成功，并查看 `installed-fetch.json` 中正式生成的 Nix store `command` 和示例参数 `--user-agent=agent-env-nix-example`。先复制 fixture 的模型与审批配置再 apply，不能用通用模板覆盖生成的 MCP。gpt-6-luna/low 是运行输入，不是本产品验收门槛。审批配置来自该固定模板：`approval_policy = "on-request"` 允许 runtime 按需请求审批，`approvals_reviewer = "auto_review"` 指定自动审核者；这不等于审批必然通过，不改变 `workspace-write` 边界，也不保证网络或 MCP 可达。
+
+用户确认本轮“提权”指需要时交给自动审批器审批。由 runtime 按受支持的流程发起必要的权限请求，交 `auto_review` 审核；不扩大整个会话的 sandbox，不额外开放网络，不向原生 fetch MCP 参数添加 shell/exec 的 `sandbox_permissions`，也不增加 shell 探针或审批验证用例。实际拒绝或权限不可用时保留错误并停止受影响项，不替审批器作决定。
 
 以上是首次准备；Nix 自动复用有效输出。后续仅修订配方或记录时，保留仍有效的资产、构建及消费者，引用原准备记录，不从头安装。若实际安装错误，修产品或正式安装入口，不手工补 MCP entry。不要使用离线 `tests/integration.sh` 的假模型、假 MCP、HOME/CODEX_HOME 设置。
 
 ## 一次真实请求
 
-沿用 §7 的显式 sandbox/cd 和逐参数编码。模型、推理、MCP及环境设置来自项目配置；不查 eval 全局配置/trust 表、不手工修改 trust，也不直接执行 Codex。runtime 可能持久化此测试消费者的 trust；`--ephemeral` 不保证 trust 临时化。实际 untrusted、managed-policy 或加载错误据实处理，不绕过。
+沿用 §7 的显式 sandbox/cd 和逐参数编码。模型、推理、审批、MCP及环境设置来自项目配置；不查 eval 全局配置/trust 表、不手工修改 trust，也不直接执行 Codex。本轮不传 `--ephemeral`，使用默认持久会话；runtime 仍可能持久化此测试消费者的 trust。实际 untrusted、managed-policy 或加载错误据实处理，不绕过。
 
 ```bash
 PROMPT='Use the configured fetch MCP server to call its fetch tool once with url https://www.rfc-editor.org/rfc/rfc2606.txt and max_length 200. Do not use shell commands, browse with another tool, read project files, edit files, delegate, or call any other MCP tool. If the MCP call is unavailable or fails, report that and stop without retrying.'
-set -- --json --ephemeral --skip-git-repo-check \
+set -- --json --skip-git-repo-check \
   --sandbox workspace-write --cd "$CONSUMER" -- "$PROMPT"
 COMMAND=$(jq -rRn --args '$ARGS.positional | map(@sh) | join(" ")' -- "$@")
 jq -n --arg command "$COMMAND" '{command:$command,timeout:300}' \
