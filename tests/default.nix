@@ -1,6 +1,19 @@
 { pkgs, agentLib, example }:
 let
   lib = pkgs.lib;
+  cachedFixture = pkgs.writeShellScriptBin "agent-env" ''
+    test "$#" = 3 && test "$1" = apply && test "$2" = --project || exit 1
+    printf '%s\n' "$3" >> "$CALL_LOG"
+  '';
+  cachedActivation = agentLib.mkCachedActivation {
+    inherit pkgs;
+    environment = cachedFixture;
+  };
+  namedActivation = agentLib.mkCachedActivation {
+    inherit pkgs;
+    environment = cachedFixture;
+    name = "producer-activate";
+  };
   python = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
   materializeFixture = agentLib.mkAgentPackage {
     inherit pkgs;
@@ -53,6 +66,7 @@ let
     assert !succeeds (empty { files = { "overlap" = ./integration.sh; "overlap/nested" = ./integration.sh; }; }).drvPath;
     true;
   evaluation =
+    assert !succeeds (agentLib.mkCachedActivation { inherit pkgs; environment = cachedFixture; name = "../unsafe"; }).drvPath;
     assert example.base.drvPath == disabled.drvPath;
     assert (called.override { enableHarnesses = [ ]; }).agentEnv.enableHarnesses == [ ];
     assert called.drvPath == (called.override { enableHarnesses = [ ]; }).drvPath;
@@ -89,6 +103,24 @@ in
     cp -R ${../tests} tests
     chmod -R u+w runtime tests
     python -m unittest discover -s tests -p 'test_*.py' -v
+    touch "$out"
+  '';
+
+  cached-activation = pkgs.runCommand "agent-env-cached-activation-test" {
+    nativeBuildInputs = [ pkgs.python3 pkgs.bash pkgs.coreutils ];
+  } ''
+    cp -R ${../runtime} runtime
+    cp -R ${../tests} tests
+    python tests/test_cached_activation.py -v
+    mkdir "project with spaces"
+    export CALL_LOG="$PWD/calls"
+    ${cachedActivation}/bin/agent-env-activate --project "$PWD/project with spaces"
+    ${namedActivation}/bin/producer-activate --project "$PWD/project with spaces"
+    test "$(wc -l < "$CALL_LOG")" = 1
+    ${namedActivation}/bin/producer-activate --project "$PWD/project with spaces" --force
+    test "$(wc -l < "$CALL_LOG")" = 2
+    test -f "project with spaces/.agent-env-applied"
+    test ! -e "project with spaces/.agent-env-apply.lock"
     touch "$out"
   '';
 

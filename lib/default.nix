@@ -10,4 +10,5 @@ let
 in
 {
   inherit mkAgentPackage mkProject;
+  mkCachedActivation = import ./cached-activation.nix;
 }
