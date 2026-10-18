@@ -82,7 +82,8 @@ Old producer-specific PR #96 markers are not reused by this shared wrapper.
 
 Offline checks: `python3 tests/test_cached_activation.py -v` using host Bash and
 GNU coreutils (macOS's default BSD tools are insufficient). These use a stub
-installer, not a real installation. See the [scoped plan and results](plan/cached-activation.md).
+installer, not a real installation. See the [implementation plan](plan/cached-activation/implementation-plan.md) and
+[test plan and results](plan/cached-activation/test-plan.md).
 
 ## Producer package
 
