@@ -25,6 +25,65 @@ The example combines two root packages with a shared dependency. It copies a com
 
 First-round delivery targets only `aarch64-darwin`. Existing Linux outputs remain in code, but Linux support/builds are not delivery or test gates. The approved T1–T4 Darwin build/runtime checks passed on an Apple Silicon Mac on 2026-10-16 (runtime-unit 38/38, upstream-copy, example build and two-example integration); third-gate test-result review is PASS. Prior Linux runs remain supplementary evidence only. See [validation](docs/validation.md) and [test review](plan/test-review.md) for the exact scope, results and exclusions.
 
+## Cached shell activation
+
+`lib.mkCachedActivation { pkgs; environment; name ? "agent-env-activate"; }`
+wraps one existing `mkProject` environment. It extracts the cached wrapper from
+[professor-contact PR #96](https://github.com/ScholarWorkflow/professor-contact/pull/96)
+without changing `agent-env apply` or `remove`.
+
+```nix
+let
+  environment = inputs.agent-env.lib.mkProject {
+    inherit pkgs;
+    roots = [ review otherWorkflow ];
+  };
+  activate = inputs.agent-env.lib.mkCachedActivation {
+    inherit pkgs environment;
+    # Optional executable name, e.g. "professor-contact-activate".
+  };
+in pkgs.mkShell {
+  packages = [ activate ];
+  shellHook = ''
+    "${activate}/bin/agent-env-activate" --project "$PWD" || exit $?
+  '';
+}
+```
+
+With an existing direnv setup, use this as the consumer's devShell and put
+`use flake` in its `.envrc`. The consumer's lock file pins its inputs. Call the
+Nix-built entrypoint; do not copy the shell implementation into each producer.
+The CLI accepts `--project DIRECTORY` (default: current directory), `--force`,
+and `--help`. `name` only selects the executable and diagnostic prefix.
+
+The cache key is the environment store output plus the physical project path.
+First use, a changed environment or a moved project invokes the existing
+`agent-env apply --project`; an unchanged successful key skips it. All names
+share one project marker `.agent-env-applied` and lock `.agent-env-apply.lock`.
+A failed apply invalidates the previous success; only successful apply publishes
+a marker atomically. Symlink/non-regular markers and newline-containing project
+paths are rejected. Relative paths ignore inherited `CDPATH`.
+
+Use **one combined environment per project**: combine multiple roots in
+`mkProject` before wrapping. Two separate producer environments are replacements,
+not additive installations. Their common marker ensures A → B → A reapplies A;
+separate per-producer markers would incorrectly skip it. Renaming a wrapper for
+the same environment does not create another cache namespace.
+
+Add `/.agent-env-applied` and `/.agent-env-apply.lock/` to the consumer's
+`.gitignore`. Concurrent wrapper calls fail fast; retry after the active call
+finishes. After a crash, remove the stale lock directory only after checking no
+activation is running. Direct `agent-env apply` / `remove` do not participate in
+this lock or update/invalidate the marker: do not run them concurrently with the
+wrapper, and use `agent-env-activate --force` afterward to reapply. Manual edits
+or deletions of installed files likewise require `--force`; the cache does not
+monitor files or bypass the installer's existing configuration protections.
+Old producer-specific PR #96 markers are not reused by this shared wrapper.
+
+Offline checks: `python3 tests/test_cached_activation.py -v` using host Bash and
+GNU coreutils (macOS's default BSD tools are insufficient). These use a stub
+installer, not a real installation. See the [scoped plan and results](plan/cached-activation.md).
+
 ## Producer package
 
 A producer owns its package split, business files, instructions, runtimes, and direct dependencies. A package file suitable for `callPackage` looks like:
