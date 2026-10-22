@@ -1,6 +1,6 @@
 # agent-env-nix: narrow shell activation
 
-Directory-parent link behavior is revised by the current [directory symlink plan](directory-symlinks.md), following the user decision of 2026-10-22. Other historical design and result records are unchanged.
+Directory-parent link behavior is revised by the current [directory symlink execution plan](directory-symlinks/execution-plan.md) and its separate [test plan](directory-symlinks/test-plan.md), following the user decision of 2026-10-22. Other historical design and result records are unchanged.
 
 - Plan revision: v0.6 with Darwin-only scope addendum (2026-10-15). The original design approval remains valid for unchanged behavior; the platform-scope adjustment passed independent targeted review on 2026-10-15.
 - Requirement revision: R3. User messages Sentinel_7d746093b3ec81919129b980200cf634 and Sentinel_440c4ba567d88191817540ed750bfa57 approve unconditional skill/agent replacement, Python only for config, and dropping cross-file recovery in favor of reporting failure and rerunning.

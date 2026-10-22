@@ -2,7 +2,7 @@
 
 Date: 2026-10-22. Reviewer: independent review agent, not the plan/code author. No tests were executed by this reviewer; no repository comment or merge action was performed.
 
-Requirement revision: user's 2026-10-22 decision to support writing through user-chosen directory symlinks. Target: RekiDunois/agent-env-nix. Upstream baseline: `91861b4f028eda1dbeb41481dcc48cd7c4a60874`; local baseline snapshot: `65a0675`. Candidate: working-tree diff plus `plan/directory-symlinks.md` v1, including its concrete offline recipe. Plan content SHA-256 at review: `abd5951255e94e66a65a98e0ee40c72945d56fbae419fd2c86ffeea796c602b5`.
+Requirement revision: user's 2026-10-22 decision to support writing through user-chosen directory symlinks. Target: RekiDunois/agent-env-nix. Upstream baseline: `91861b4f028eda1dbeb41481dcc48cd7c4a60874`; local baseline snapshot: `65a0675`. Candidate: working-tree diff plus the then-combined `plan/directory-symlinks.md` v1 (now split into [execution plan](directory-symlinks/execution-plan.md) and [test plan](directory-symlinks/test-plan.md)), including its concrete offline recipe. Plan content SHA-256 at review: `abd5951255e94e66a65a98e0ee40c72945d56fbae419fd2c86ffeea796c602b5`.
 
 Authority: Plan Reviewer Rule (2026-10-09), Test Engineer Rule (2026-10-09), Project Consensus (2026-10-19), and Merge Reviewer Rule (2026-10-09), read from their current referenced Notion pages. The user's newer directory-layout decision supersedes the old parent-symlink rejection, not the selected-leaf replacement or unrelated-file protection requirements.
 
@@ -50,3 +50,11 @@ Test Gate 3: PASS for all four required methods on this candidate. The reviewer 
 Current candidate static review completeness: COMPLETE. Required code changes: none. No target-mapping, migration, target-registration or user-confirmation framework was added; resource directory symlinks are ordinary filesystem paths after the existing guard accepts them. Initial Plan P1–P4 approval remains applicable. Candidate plan SHA-256 at this result review: `7605944e374b28a6439395cdb1fc2a6800973ac99c224d33d3b3fa60900cbb1b`.
 
 The candidate is suitable to publish as a draft PR. A final merge verdict is deferred until the published head/base are identified and mapped to this reviewed diff; no further test is requested solely for publication or SHA changes. This record does not authorize merging.
+
+## Document structure update
+
+The execution plan and test plan now occupy [separate execution](directory-symlinks/execution-plan.md) and [test](directory-symlinks/test-plan.md) files, as required by the user. The former combined path is navigation only. The preceding approvals and result review refer to the unchanged substantive candidate; this structure-only move does not constitute new approval and does not require rerunning tests. Historical plan hashes above identify the reviewed combined document, not the split files. Formal PR merge review remains pending.
+
+### Independent structure-only re-review
+
+The independent reviewer checked the separated execution and test files on 2026-10-22. The user's latest explicit instruction requires two files and supersedes the earlier same-file presentation decision. Both plans retain their previously reviewed substantive scope; the test file retains the recipe, all attempts and current results. The former combined file is navigation only, and the implementation-plan and review links resolve to the separate files. No product or test implementation changed. Previous Plan P1–P4 approval and Test Gates 1–3 remain applicable; no expanded test or rerun is required. The structure-only update is suitable for publication. Formal PR merge review remains separate.
