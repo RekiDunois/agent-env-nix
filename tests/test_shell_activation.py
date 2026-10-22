@@ -59,12 +59,44 @@ class ShellActivationTests(unittest.TestCase):
         self.assertFalse((self.project / ".agents/skills/example").exists())
         self.assertFalse((self.project / ".codex/agents/example.toml").exists())
 
-    def test_symlinked_destination_component_fails(self):
-        external = self.base / "outside"
+    def test_directory_links_support_apply_upgrade_remove(self):
+        external = self.base / "outside with spaces"
         external.mkdir()
-        (self.project / ".agents").symlink_to(external)
+        for name in (".agents", ".codex"):
+            target = external / name
+            target.mkdir()
+            (self.project / name).symlink_to(target)
+        skills = external / "skills"
+        skills.mkdir()
+        (self.project / ".agents/skills").symlink_to(skills)
+        roles = external / "roles"
+        roles.mkdir()
+        (self.project / ".codex/agents").symlink_to(roles)
+        (skills / "unrelated").mkdir()
+        (skills / "unrelated/keep").write_text("keep")
+        self.run_activation()
+        self.assertTrue((skills / "example/SKILL.md").is_file())
+        self.assertTrue((roles / "example.toml").is_file())
+        (skills / "example/stale").write_text("generated edit")
+        self.run_activation()
+        self.assertFalse((skills / "example/stale").exists())
+        self.run_activation("remove")
+        self.assertFalse((skills / "example").exists())
+        self.assertFalse((roles / "example.toml").exists())
+        self.assertEqual((skills / "unrelated/keep").read_text(), "keep")
+        for relative in (".agents", ".agents/skills", ".codex", ".codex/agents"):
+            self.assertTrue((self.project / relative).is_symlink())
+
+    def test_invalid_directory_link_is_not_replaced(self):
+        target = self.base / "missing"
+        link = self.project / ".agents"
+        link.symlink_to(target)
         self.run_activation(succeeds=False)
-        self.assertEqual(list(external.iterdir()), [])
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(target.exists())
+        target.write_text("not a directory")
+        self.run_activation(succeeds=False)
+        self.assertEqual(target.read_text(), "not a directory")
 
     def test_selected_leaf_symlink_is_replaced_without_following(self):
         external = self.base / "outside"

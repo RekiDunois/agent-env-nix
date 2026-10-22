@@ -82,14 +82,14 @@ let
     skills_installer=${skillsInstaller}/bin/agent-env-stage-skills
     copy_current() {
       ${lib.concatStringsSep "\n" (lib.mapAttrsToList (skillName: _: ''
-        safe_path "$project/.agents/skills"
+        safe_path "$project/.agents/skills" true
         mkdir -p -- "$project/.agents/skills"
         remove_leaf "$project/.agents/skills" ${lib.escapeShellArg skillName}
         cp -a -- "$work/upstream/skills/${skillName}" "$project/.agents/skills/${skillName}"
         chmod -R u+w -- "$project/.agents/skills/${skillName}"
       '') skills)}
       ${lib.concatStringsSep "\n" (lib.mapAttrsToList (agentName: record: ''
-        safe_path "$project/.codex/agents"
+        safe_path "$project/.codex/agents" true
         mkdir -p -- "$project/.codex/agents"
         remove_leaf "$project/.codex/agents" ${lib.escapeShellArg "${agentName}.toml"}
         cp -- ${lib.escapeShellArg record.source} "$project/.codex/agents/${agentName}.toml"
