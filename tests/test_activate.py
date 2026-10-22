@@ -68,7 +68,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(link.is_symlink())
         self.assertIn('# user config', config.read_text())
         config.write_text(config.read_text().replace('args = ["--safe"]', 'args = ["--user"]'))
-        with self.assertRaises(a.ActivationError):
+        with self.assertRaisesRegex(a.ActivationError, "owned value was edited"):
             self.remove()
         self.assertTrue(link.is_symlink())
         self.assertIn('--user', config.read_text())
