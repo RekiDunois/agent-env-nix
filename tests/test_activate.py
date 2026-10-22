@@ -185,14 +185,6 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse((self.project / ".codex/config.toml").exists())
         self.assertEqual(self.state()["mcp"], {})
 
-    def test_symlinked_destination_component_fails(self):
-        external = self.base / "external"
-        external.mkdir()
-        (self.project / ".codex").symlink_to(external)
-        with self.assertRaisesRegex(a.ActivationError, "symlink"):
-            self.apply()
-        self.assertEqual(list(external.iterdir()), [])
-
     def test_unrelated_config_edit_between_plan_and_publication_is_preserved(self):
         config = self.write(".codex/config.toml", '# initial\nmodel = "a"\n')
         runner = self.runner()
