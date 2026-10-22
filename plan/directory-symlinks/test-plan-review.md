@@ -1,6 +1,10 @@
 # 目录符号链接测试计划修订审核
 
-## 当前 v2.1 断言修正（2026-10-22）
+## 当前 v2.2 执行后交接（2026-10-22）
+
+用户已明确授权去掉 Nix 命令的 `--offline`、正常使用二进制缓存，仅完成剩余三项并推送 PR。[当前完整计划及执行记录](test-plan.md)已合并该调整。三项苹果电脑测试本轮均通过，配置保护复用此前苹果电脑的通过结果；产品、测试断言及固定依赖没有修改。前次构建失败和未执行状态仍作历史保留。当前无未完成必测项，下一负责人为结果审核者；本交接不代作第三关或 merge 批准。
+
+## 历史 v2.1 断言修正（2026-10-22）
 
 依据[最新审核更正](https://github.com/RekiDunois/agent-env-nix/pull/5#issuecomment-6341116262)，本次只处理保留的第 3 项：`tests/test_activate.py` 的 `test_directory_link_preserves_config_edits_and_link` 将 `assertRaises(ActivationError)` 改为 `assertRaisesRegex(ActivationError, "owned value was edited")`。这使其他原因的异常不能满足该断言；沿用同类测试和产品现有错误文字，不新增用例、取证或产品修改。
 

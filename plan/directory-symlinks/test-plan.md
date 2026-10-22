@@ -1,4 +1,6 @@
-# 目录符号链接测试计划 v2.1
+# 目录符号链接测试计划 v2.2
+
+2026-10-22 用户明确调整：去掉 Nix 命令的 `--offline`，正常使用二进制缓存，只完成剩余 3 项，更新记录并推送 PR。v2.2 据此修改当前准备与执行命令；保持固定依赖、输入、断言及 4 项业务目标不变。配置保护已在 v2.1 运行中通过，本轮直接复用，不重复执行。旧失败记录完整保留。本轮以此明确授权取代此前离线构建限制。
 
 修订日期：2026-10-22。需求为用户当日确认的目录符号链接支持，基础版本为 `91861b4f028eda1dbeb41481dcc48cd7c4a60874`；产品代码继续沿用 PR #5 的 `0e916fab4859e9a98b64aef736b329399ee3ee86`。v2.1 在计划提交 `995f0a608b0f564bd24891f9f6ef854f88f1e64a` 上，仅将配置保护方法的异常断言限定为 `owned value was edited`；测试版本为包含该修改的本提交。业务目标、输入、预期及运行入口不变。参见[执行计划](execution-plan.md)、[既有独立审核](../directory-symlinks-review.md)和[本轮修订审核](test-plan-review.md)。
 
@@ -13,7 +15,7 @@
 | 选中叶子链接不被跟随 | 选中技能叶子为指向外部目录的链接 | 替换链接并安装选中技能，外部目标文件保留 | `ShellActivationTests.test_selected_leaf_symlink_is_replaced_without_following` |
 | 链接目录内的配置编辑保护 | `.codex` 指向外部目录；安装后编辑已生成的 MCP 配置，再删除 | 安装保留目录链接及无关配置；删除报告既有冲突，保留用户编辑和链接 | `ConfigTests.test_directory_link_preserves_config_edits_and_link` |
 
-前三个方法位于 `tests/test_shell_activation.py`，第四个位于 `tests/test_activate.py`。采用现有测试断言；模拟的 `nix-store` 只检查激活流程，不证明真实垃圾回收根。已有 Linux 4 项通过及其审核继续有效，作为补充证据；2026-10-16 的旧苹果电脑结果不证明本次改动。当前苹果电脑配置保护方法通过，前三项因示例构建失败未执行，详见下方本地执行记录；第三关待结果审核者处理。
+前三个方法位于 `tests/test_shell_activation.py`，第四个位于 `tests/test_activate.py`。采用现有测试断言；模拟的 `nix-store` 只检查激活流程，不证明真实垃圾回收根。当前苹果电脑 4 项均有有效通过结果：本轮完成前三项，配置保护复用前次苹果电脑结果。已有 Linux 结果继续作为补充证据；2026-10-16 的旧苹果电脑结果不证明本次改动。详见下方 v2.2 执行记录，第三关待结果审核者处理。
 
 按[最新审核更正](https://github.com/RekiDunois/agent-env-nix/pull/5#issuecomment-6341116262)，第四项沿用同类测试的 `assertRaisesRegex`，确认删除失败来自用户编辑已生成配置。旧 Linux 配置方法结果只覆盖旧断言；收紧后的断言已在本轮苹果电脑执行中通过。其余 3 项既有 Linux 结果不受影响。不追加已撤回的重复链接断言或强制恢复分支；现有配置备用入口仍是可用步骤，不是准备失败后的通过前提。
 
@@ -21,7 +23,7 @@
 
 由本地测试工程师在已有 Nix 的苹果芯片电脑上，从本 PR 工作树根目录执行。保留 `flake.lock` 和现有存储缓存，不安装 Nix、不更新依赖。`repo` 取当前目录，`run` 是仓库外的输出目录；不要将示例项目安装到用户项目。
 
-使用仓库 `tests/default.nix` 中 `runtime-unit` 的构建环境提供固定 Python、TOMLKit、Bash、coreutils、findutils、gnugrep、jq、flock。`nix develop` 只进入该环境，不执行其全套构建阶段；只运行下列 4 个方法。宿主的 `uv` 用于启动该环境的 Python，不下载解释器或额外依赖。命令没有模型、评估服务或外部 MCP 调用。
+使用仓库 `tests/default.nix` 中 `runtime-unit` 的构建环境提供固定 Python、TOMLKit、Bash、coreutils、findutils、gnugrep、jq、flock。`nix develop` 只进入该环境，不执行其全套构建阶段；本轮只运行下列 3 个尚未完成的方法。宿主的 `uv` 用于启动该环境的 Python，不下载解释器或额外依赖。Nix 正常使用已有配置的二进制缓存；不更新锁文件或更换依赖。命令没有模型、评估服务或外部 MCP 调用。
 
 先在同一个 Bash 会话准备（`bash --noprofile --norc`）：
 
@@ -46,7 +48,7 @@ mkdir -p "$NIX_CACHE_HOME" "$UV_CACHE_DIR" "$run/fixtures"
 
 ```bash
 environment=
-if nix build --offline --no-update-lock-file --no-link --print-out-paths \
+if nix build --no-update-lock-file --no-link --print-out-paths \
   "path:$repo#packages.aarch64-darwin.default" \
   > "$run/environment.txt" 2> "$run/build.log"; then
   printf 'build_exit=0\n' > "$run/build-status.txt"
@@ -62,7 +64,7 @@ fi
 只有构建成功、`environment` 非空且脚本存在时才执行下列命令；否则直接跳到配置方法的备用步骤，仍沿用当前会话的 `repo`、`run` 和 `uv_runner`。`AGENT_ENV_ACTIVATION_SCRIPT` 指向刚生成的脚本，不代入旧版本。测试内部各自建立临时项目、主目录和配置目录；在进入 Nix 环境后设置 `TMPDIR`，将它们置于本次输出目录下。当前测试会在每个方法结束时清理自己的临时目录，包括失败时；保留标准断言报告，不要求保留已清理目录或增加采集工具。
 
 ```bash
-nix develop --offline --no-update-lock-file \
+nix develop --no-update-lock-file \
   "path:$repo#checks.aarch64-darwin.runtime-unit" \
   --command bash --noprofile --norc -c '
     set -euo pipefail
@@ -76,17 +78,16 @@ nix develop --offline --no-update-lock-file \
       "$test_python" -m unittest -v \
       tests.test_shell_activation.ShellActivationTests.test_directory_links_support_apply_upgrade_remove \
       tests.test_shell_activation.ShellActivationTests.test_invalid_directory_link_is_not_replaced \
-      tests.test_shell_activation.ShellActivationTests.test_selected_leaf_symlink_is_replaced_without_following \
-      tests.test_activate.ConfigTests.test_directory_link_preserves_config_edits_and_link
+      tests.test_shell_activation.ShellActivationTests.test_selected_leaf_symlink_is_replaced_without_following
   ' bash "$repo" "$uv_runner" "$run" "$environment" > "$run/tests.log" 2>&1
 ```
 
-预计准备环境和测试共 1–5 分钟，单次最多 10 分钟。命令退出码为 0 且测试报告 4 个方法均通过，才记该次 4 项通过。断言失败记对应业务失败；解释器、依赖或环境启动错误记无法判断，未开始的方法记未执行。不要以构建成功或环境就绪代替业务结果。
+预计准备环境和测试共 1–5 分钟，单次最多 10 分钟。命令退出码为 0 且测试报告 3 个方法均通过，才记本次 3 项通过；配置保护复用前次苹果电脑的通过结果。断言失败记对应业务失败；解释器、依赖或环境启动错误记无法判断，未开始的方法记未执行。不要以构建成功或环境就绪代替业务结果。
 
 若示例构建失败，停止依赖它的 3 个方法；第四项不依赖生成脚本，可单独使用现有开发环境执行一次（仅在第四项尚未运行时使用，不与上面的成功运行重复）：
 
 ```bash
-nix develop --offline --no-update-lock-file "path:$repo" \
+nix develop --no-update-lock-file "path:$repo" \
   --command bash --noprofile --norc -c '
     set -euo pipefail
     cd "$1"
@@ -102,13 +103,44 @@ nix develop --offline --no-update-lock-file "path:$repo" \
 
 ### 失败处理、结果保存与交接
 
-- 默认每项一次，无自动重试。缓存缺失、权限不足或依赖不可用时，保留退出码和对应日志，停止受影响项；不下载新源、不改锁文件、不扩大权限求通过。需要权限的实际操作由执行者按环境审批要求处理。
+- 默认每项一次，无自动重试。按本轮用户授权正常使用二进制缓存；缓存缺失、权限不足或依赖不可用时保留退出码和对应日志，停止受影响项，不改锁文件或更换依赖。需要权限的实际操作由执行者按环境审批要求处理。本轮是明确授权的步骤调整，不覆盖或抹去前次离线构建失败。
 - 只有已确认外部故障恢复、输入与断言不变且没有重复业务副作用时，允许受影响命令再尝试一次，总计最多两次。先说明恢复事实，使用新的输出目录和全新临时测试状态；保留第一次日志，不清除或覆盖它。没有恢复事实时停止，不连续重跑。
 - 断言失败不因结果不满意重试。产品问题交产品实现负责人，步骤问题交测试计划工程师；修订后先核对影响，只复验受影响项，继续采用未受影响结果。已确认的业务失败不被之后的环境或清理错误覆盖。
-- 正式记录写入本文件：实际产品和测试提交、计划 v2.1、工具版本、运行目录、实际命令及退出码、4 项结果、复用来源和未完成项。固定依赖由同版本 `flake.lock` 与上述环境入口说明，不采集全环境快照。原始输出保存在仓库外，入库记录只保留必要脱敏摘要。
+- 正式记录写入本文件：实际产品和测试提交、计划 v2.2、工具版本、运行目录、实际命令及退出码、4 项结果、复用来源和未完成项。固定依赖由同版本 `flake.lock` 与上述环境入口说明，不采集全环境快照。原始输出保存在仓库外，入库记录只保留必要脱敏摘要。
 - v2.1 准备阶段仅修正测试断言和同步记录，未构建或正式执行。其后本地执行情况见下节；结果取得后由结果审核者完成第三关。本次不要求全仓回归、真实用户安装或 Linux 重跑。
 
-## 本地执行记录（2026-10-22，苹果芯片平台）
+## v2.2 本地执行记录（2026-10-22，苹果芯片平台）
+
+执行角色：本地执行工程师。依照本轮用户明确授权，去掉 Nix 命令的 `--offline`，使用原有二进制缓存，只执行此前未完成的三项。实际仓库版本为 `562dde2f290a714f4cf5fe2c85b847d61c0207eb` 加本次步骤和记录文档差异；产品代码仍为 `0e916fab4859e9a98b64aef736b329399ee3ee86`，测试代码仍为 `b2abbd2cf761fe612f1ccd148886552e4b4df8aa`。产品、测试断言与 `flake.lock` 均未修改，未变目标沿用此前批准，不新增用例。
+
+本次独立输出目录为 `/tmp/agent-env-directory-links-cache.uI7nkmQ1`，准备沿用上文步骤；前次目录与失败日志保留。工具仍为 Nix `2.34.8`、uv `0.12.22` 和固定 Python `3.14.7`，平台为苹果芯片。Nix 按已有配置从 `https://cache.nixos.org` 取得依赖，不更新依赖或安装 Nix。
+
+实际构建命令：
+
+```bash
+nix build --no-update-lock-file --no-link --print-out-paths \
+  "path:$repo#packages.aarch64-darwin.default" \
+  > "$run/environment.txt" 2> "$run/build.log"
+```
+
+北京时间 21:22:06 开始，21:22:27 完成，退出 **0**。取得当前示例产物 `/nix/store/k9i8bap3mbswa72vcmr20pdnhjz6clsp-agent-environment`，激活脚本存在。正常使用二进制缓存后准备成功；前次失败不能据此解释为依赖整体不可用。
+
+随后原样执行上文 v2.2 三方法命令：`nix develop --no-update-lock-file "path:$repo#checks.aarch64-darwin.runtime-unit"`，通过内层 Bash 设置独立 `TMPDIR` 与刚生成的 `AGENT_ENV_ACTIVATION_SCRIPT`，使用固定 Python 及 `uv run` 启动现有三个方法。保留 `uv run --offline`，它只限制 Python 包解析，不会禁用 Nix 二进制缓存。21:22:39 开始，21:22:50 完成，退出 **0**，标准报告为 `Ran 3 tests in 3.250s`、`OK`。只进入既有构建环境，未执行全套测试。
+
+| 必测项 | 当前苹果电脑结果 | 有效记录 |
+| --- | --- | --- |
+| 目录链接安装、更新、删除 | 通过 | 本轮三方法报告，对应方法为 `ok` |
+| 无效目录链接保留 | 通过 | 同上 |
+| 选中叶子链接不被跟随 | 通过 | 同上 |
+| 链接目录内配置编辑保护 | 通过，复用 | 前次 `/tmp/agent-env-directory-links-darwin.jg8KUuWd/config-only.log`，退出 0，当前收紧断言已通过 |
+
+当前四项均已有有效苹果电脑通过结果；配置方法没有重复运行。`build.log`、`tests.log`、`build-status.txt`、`tests-status.txt`、`tools.log`、`revision.txt` 留在本次仓库外目录，不入库。没有业务失败，没有重复测试，没有安装到真实用户项目。前次构建失败及当时部分完成结论保留在下一节，当前状态由本节取代。
+
+本地执行范围内无待测项；下一步由结果审核负责人处理第三关，merge 审核另行进行。本节只记录执行结果，不自行批准关口。
+
+专用 `implementation_reviewer` 已基于前次完整产品审核复核 v2.2 调整、直接影响及原未完成三项的结果，结论为**完整**，无新增修正项。产品、测试断言和固定依赖未变；四项结果齐备，前次失败保留。此结论只确认本地执行产物符合有效计划，不代表正式测试关口或 merge 批准。
+
+## 首次本地执行记录（2026-10-22，苹果芯片平台，历史）
 
 执行角色：本地执行工程师。完整执行计划为 v1，测试计划为 v2.1；产品代码版本为 `0e916fab4859e9a98b64aef736b329399ee3ee86`，实际工作树及测试版本为 `b2abbd2cf761fe612f1ccd148886552e4b4df8aa`。两版本之间只有计划文档及配置保护断言修正，产品代码与固定依赖没有变化。本轮只增加执行记录，不修改产品或测试。
 
