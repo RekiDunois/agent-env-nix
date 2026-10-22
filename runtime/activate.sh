@@ -19,15 +19,17 @@ done
 IFS= read -r -d '' project < <(realpath -e -z -- "$project_arg") || die 'cannot resolve project directory'
 state_dir="$project/.agent-env-nix"
 
-# The project itself is canonical; all managed parent components must be real.
+# State paths stay private and link-free; resource parents may be directory links.
 safe_path() {
-  local target=$1 current=$project relative component
+  local target=$1 current=$project relative component allow_directories=${2:-false}
   case "$target" in "$project"/*) relative=${target#"$project"/} ;; *) die "path outside project: $target" ;; esac
   while [ -n "$relative" ]; do
     component=${relative%%/*}
     [ -n "$component" ] && [ "$component" != . ] && [ "$component" != .. ] || die 'unsafe path component'
     current="$current/$component"
-    [ ! -L "$current" ] || die "symlinked managed component: $current"
+    if [ -L "$current" ]; then
+      [ "$allow_directories" = true ] && [ -d "$current" ] || die "invalid symlinked managed component: $current"
+    fi
     if [ "$relative" = "$component" ]; then break; fi
     [ ! -e "$current" ] || [ -d "$current" ] || die "non-directory parent: $current"
     relative=${relative#*/}
@@ -87,7 +89,7 @@ trap 'exit 143' TERM
 remove_leaf() {
   local parent=$1 name=$2 target
   valid_name "$name" || die 'unsafe selected export name'
-  safe_path "$parent"
+  safe_path "$parent" true
   target="$parent/$name"
   if [ -L "$target" ]; then rm -- "$target"
   elif [ -d "$target" ]; then
@@ -153,7 +155,7 @@ for kind in skills agents; do
   else : > "$work/$kind.desired"; fi
   check_names "$work/$kind.desired"
 done
-for parent in "$project/.agents/skills" "$project/.codex/agents"; do safe_path "$parent"; done
+for parent in "$project/.agents/skills" "$project/.codex/agents"; do safe_path "$parent" true; done
 
 config_args=(--manifest "$manifest" --project "$project" --state "$state_dir/mcp-state.json" --prepared "$work/config.json" --action "$action" "${extra[@]}")
 "$python_bin" "$config_helper" prepare "${config_args[@]}"

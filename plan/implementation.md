@@ -1,5 +1,7 @@
 # agent-env-nix: narrow shell activation
 
+Directory-parent link behavior is revised by the current [directory symlink plan](directory-symlinks.md), following the user decision of 2026-10-22. Other historical design and result records are unchanged.
+
 - Plan revision: v0.6 with Darwin-only scope addendum (2026-10-15). The original design approval remains valid for unchanged behavior; the platform-scope adjustment passed independent targeted review on 2026-10-15.
 - Requirement revision: R3. User messages Sentinel_7d746093b3ec81919129b980200cf634 and Sentinel_440c4ba567d88191817540ed750bfa57 approve unconditional skill/agent replacement, Python only for config, and dropping cross-file recovery in favor of reporting failure and rerunning.
 - Target baseline: RekiDunois/agent-env-nix main 3b08c9e652dd8df5f3c1686347ef671476022335. Do not include unmerged PR #2 or modify the six producer repositories.
@@ -50,7 +52,7 @@ Delete runtime/materialize.py once its caller and directly affected checks have 
 
 lib/project.nix retains manifest/config generation and upstream skillsInstaller, but produces a shell launcher. A small shell support file may hold argument/path/lifecycle handling; Nix emits the fixed copy commands and declared name lists. All executables have fixed store paths. User input selects the real project root only; it cannot supply arbitrary source paths or shell fragments.
 
-Resolve the project; reject unsafe state/parent components and out-of-project destinations. Hold the project lock via pkgs.flock. A selected leaf symlink is removed as a link, never followed; do not traverse symlinked .agents, .agents/skills, .codex, .codex/agents, state or config components. Check roots/names from saved state before using them; never source stored shell code. Normal non-symlink directory/file contents at a selected destination do not create a content conflict.
+Resolve the project; reject unsafe state components and lexical out-of-project destinations. Hold the project lock via pkgs.flock. A selected leaf symlink is removed as a link, never followed. Existing directory links in .agents, .agents/skills, .codex and .codex/agents are followed and preserved, including outside-project targets; dangling/non-directory links fail. State/lock paths and the config.toml file itself remain link-free. Check roots/names from saved state before using them; never source stored shell code. Normal non-symlink directory/file contents at a selected destination do not create a content conflict.
 
 Under the lock:
 1. Validate argument/state compatibility and destination parent paths; ask config helper to preflight only selected/previously managed MCP keys. No agent-config or global-agent discovery gate remains.
@@ -89,7 +91,7 @@ Alternative: retain Python orchestration but call cp inside it. It does not meet
 Invariants and representative counterexamples:
 - Selected same-name preexisting or edited file/tree is replaced, including extra stale files; no fingerprint protection blocks it.
 - An unrelated sibling cannot enter the cleanup list merely because it exists beside a selected export; parent roots are never deletion targets.
-- A selected symlink cannot redirect deletion/copy outside the project; parent symlinks stop activation.
+- A selected leaf symlink is unlinked rather than traversed. Directory parents may link outside the project by user choice; only selected leaves there may be replaced or removed.
 - Interrupted copies can be incomplete, but names remain discoverable for a full repeat or remove and all possibly needed roots remain.
 - An unrelated config edit after preflight cannot be overwritten by a stale rendered file; an edited MCP value cannot become implicitly writable through a bookkeeping retry.
 - Simultaneous activations use one project lock; arbitrary editor coordination is not promised.

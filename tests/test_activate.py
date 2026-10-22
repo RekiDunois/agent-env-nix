@@ -57,6 +57,22 @@ class ConfigTests(unittest.TestCase):
     def assert_no_published(self):
         self.assertFalse((self.project / ".agent-env-nix/mcp-state.json").exists())
 
+    def test_directory_link_preserves_config_edits_and_link(self):
+        external = self.base / "external codex"
+        external.mkdir()
+        link = self.project / ".codex"
+        link.symlink_to(external)
+        config = external / "config.toml"
+        config.write_text('# user config\nmodel = "mine"\n')
+        self.apply()
+        self.assertTrue(link.is_symlink())
+        self.assertIn('# user config', config.read_text())
+        config.write_text(config.read_text().replace('args = ["--safe"]', 'args = ["--user"]'))
+        with self.assertRaises(a.ActivationError):
+            self.remove()
+        self.assertTrue(link.is_symlink())
+        self.assertIn('--user', config.read_text())
+
     def test_unrelated_settings_comments_and_siblings_survive(self):
         config = self.write(".codex/config.toml", '# important comment\nmodel = "mine" # inline\n[unknown.future]\nx = 3\n[mcp_servers.other]\nurl = "https://example.com"\n')
         sibling = self.write(".agents/skills/unrelated/SKILL.md", "not owned")

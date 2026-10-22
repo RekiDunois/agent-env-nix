@@ -50,7 +50,7 @@ def exists(path):
 
 
 def safe_path(path):
-    """Reject links and non-directory ancestors, including dangling links."""
+    """Allow directory-link ancestors, but never replace a linked config/state file."""
     path = Path(path)
     if not path.is_absolute():
         fail(f"expected an absolute path: {path}")
@@ -60,7 +60,9 @@ def safe_path(path):
         except FileNotFoundError:
             continue
         if stat.S_ISLNK(mode):
-            fail(f"symlink is not an allowed activation path: {part}")
+            if part == path or not part.is_dir():
+                fail(f"symlink is not an allowed activation path: {part}")
+            continue
         if part != path and not stat.S_ISDIR(mode):
             fail(f"non-directory activation path component: {part}")
     return path
