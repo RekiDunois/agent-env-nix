@@ -2,7 +2,7 @@
 
 Baseline: main `c368871942435bdc178a1063ce9c677acaf8cabc`. Product/reviewed PR revision: `04f22a464e26207746a619312e80f6d6df6fccf9` ([PR #6](https://github.com/RekiDunois/agent-env-nix/pull/6)).
 
-Document revision: split-plan v1, 2026-10-24. The user's latest instruction is “你给拆成两个吧，走正常审核”. This revision separates the two canonical plans without changing product or test code, requirements, or test scope. The previous combined path is navigation only.
+Document revision: split-plan v1, 2026-10-24. The user requested separate plans and normal review, then authorized completing the existing tests and pushing the results to PR #6. Product and test code, requirements and test scope remain unchanged. The previous combined path is navigation only.
 
 ## Requirement, solution and preserved behavior
 
@@ -20,6 +20,6 @@ This is a bounded new interface and persistent activation behavior, not a mechan
 
 Implementation exists at the PR revision above. The original independent review approved execution gates P1–P4; the split revision has now received independent normal-review approval for execution gates P1–P4. This is plan approval, not test execution or merge approval. See the [review record](../activation-port-env-review.md).
 
-The [test plan and retained results](test-plan.md) are the unique source for checks, commands and evidence. Existing host-fixture results remain reusable because this split changes no product or test code. Real Nix evaluation/build and packaged activation wiring remain unexecuted; implementation-plan approval cannot make those results PASS or the PR READY.
+The [test plan and retained results](test-plan.md) are the unique source for checks, commands and evidence. Existing host-fixture results remain reusable because product and test code are unchanged. Current Nix execution status is recorded there; implementation-plan approval does not establish test results or merge readiness.
 
-The earlier authoring scope did not permit Nix installation. The user subsequently authorized cloud Nix installation; the parent reports the execution environment failed before installation began. This documentation-only revision neither revokes that authorization nor attempts installation or bypasses the environment restriction. Resume the bounded Nix validation only in a working authorized environment, with runnable steps reviewed before execution. The parent coordinates the execution owner and remote PR checks.
+此前云端安装在命令开始前受阻的记录仍保留。本轮使用已安装的 Nix 2.34.8，在 `aarch64-darwin` 上执行既定的声明检查、构建和真实打包激活验证；不再安装 Nix，不改变上游版本或产品代码。首次缓存数据库写入受沙箱限制后，解除该限制并按既定规则重试一次。解析命令按用户要求使用 `yq` 和 `jq`，输入及完整服务器表的预期不变。执行结果、步骤修订和失败记录统一见测试计划。执行工程师负责提交和推送结果，后续合并审核另行进行。

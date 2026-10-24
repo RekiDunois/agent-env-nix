@@ -1,6 +1,6 @@
 # Activation-time port: normal independent review
 
-NOT_READY — [agent-env-nix PR #6](https://github.com/RekiDunois/agent-env-nix/pull/6); base `c368871942435bdc178a1063ce9c677acaf8cabc`; reviewed product head `04f22a464e26207746a619312e80f6d6df6fccf9`. Review date: 2026-10-24. The current split-plan v1 candidate changes documentation only.
+历史审核结论：NOT_READY — [agent-env-nix PR #6](https://github.com/RekiDunois/agent-env-nix/pull/6); base `c368871942435bdc178a1063ce9c677acaf8cabc`; reviewed product head `04f22a464e26207746a619312e80f6d6df6fccf9`. Review date: 2026-10-24. 以下原审核正文保留当时的未执行状态；本轮补测见文末执行更新及当前测试计划。产品和测试代码未变，原审核的设计与范围结论继续适用，不以执行者更新代替审核者结论。
 
 ## Current authority, revisions and completeness
 
@@ -57,3 +57,19 @@ The fixture uses the real resolver and prepared commit but supplies its manifest
 No confirmed in-scope code blocker was found in the earlier complete diff/call-chain review; this split changes no code. Current `runtime/config.py` SHA-256 remains `9e18d13d690f4a5d01ff7b5bbb383cc1aeaca344ac98d0996314ccfabc5cbb15`. No plan modification remains required. Outstanding completion work is the Nix execution/result and final remote merge-state verification, not redesign of the approved solution.
 
 The plans may be published to the existing draft PR with these explicit limits. NOT_READY is retained; this record neither approves nor authorizes merge.
+
+## 本轮执行更新（2026-10-24）
+
+本地执行工程师已按[完整测试计划](activation-port-env/test-plan.md)补齐原来缺少的 Nix 结果：在 `aarch64-darwin`、Nix 2.34.8 上，固定产品版本 `04f22a4` 的既有声明检查、实际构建及两次真实打包激活均通过，配置中的完整服务器表分别只有端口为 19091 和 19092 的预期地址。产品、测试代码及上游固定版本未改，既有 38 项测试结果复用。
+
+首次求值因沙箱限制无法写入 Nix 缓存数据库，解除该限制后唯一重试通过。首次激活成功后，执行者使用的 `yq` 整表比较命令误判；本地测试工程师将其修订为 `yq` 解析后由 `jq` 精确比较整表，输入及预期不变，专用实现符合性审核确认准备完整后，由本地执行工程师继续执行并通过。原始失败和成功输出均保留在测试计划列明的独立 `/tmp` 目录。
+
+此前“缺少 Nix 执行结果”的事实已被本轮结果取代；上文仍是历史审核记录。本更新只报告实际执行，不签发测试第三关、合并批准或改变 PR 草稿状态。
+
+## 本轮实现符合性审核
+
+专用 `implementation_reviewer` 已完成首次完整审核，结论为**完整**，未发现范围内偏差或待补材料。所审产品及测试版本为 `04f22a464e26207746a619312e80f6d6df6fccf9`，交付工作树基于 `84ba23d481ffd3573d397d53e8b1c71ad47c9398`，包含本轮四份文档修改。
+
+审核覆盖有效计划下的全部产物，包括此前未修改部分：生产者声明及清单传递、配置解析与原有保护、准备后固定提交值、两个激活脚本及缓存打包连接、README、相关测试、两份完整计划、导航及结果记录。审核确认当前产品和测试内容与固定测试源码一致，复用的配置编辑 30/30、缓存包装 8/8 及语法检查有效；新增声明检查、真实构建、19091 到 19092 的打包激活均有通过记录，首次受限及错误比较命令保留。审核期间未运行测试、修改文件或执行 Git 操作。
+
+该结论只确认实现交付完整，不代表测试关口或合并批准。下一步由执行工程师提交、推送并更新 PR；测试结果负责人处理第三关，合并负责人另行审核合并条件。最终追加本段仅记录审核结论，不改变已审实现、步骤和测试结果。
