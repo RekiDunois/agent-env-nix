@@ -21,7 +21,8 @@ class DshTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # macOS /var is a symlink to /private/var; the helper resolves physical paths.
+        self.root = Path(self.temp.name).resolve()
         self.project = self.root / 'project with spaces'
         self.project.mkdir()
         self.state = self.project / '.agent-env-nix'
