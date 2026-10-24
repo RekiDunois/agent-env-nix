@@ -250,9 +250,13 @@ and does not create project state.
 
 `mkProject { inherit pkgs; roots = [ /* existing producer packages */ ]; dshMcp = true; }`
 adds `.dsh/mcp.json` for [lihuabd/dsh-workspace-mcp](https://github.com/lihuabd/dsh-workspace-mcp).
-The default is `false`: Codex activation stays enabled and unchanged. This is an
-additional MCP projection, **not full DSH native-agent or harness support**;
-leave producer `enableHarnesses` at its existing Codex setting. No producer MCP
+The default is `false`: Codex activation stays enabled and unchanged. Skills and
+agents keep the existing `.agents/skills` and `.codex/agents` paths and Codex agent
+format; no second set of agent files is generated. The planned local DSH agent
+compatibility plugin is responsible for reading and executing those definitions;
+its runtime compatibility is not verified by this MCP output option. This option
+only adds MCP configuration and does not install or enable that plugin. Leave
+producer `enableHarnesses` at its existing Codex setting. No producer MCP
 definitions need to be copied or changed. Use the usual generated `agent-env
 apply --project ...` (or existing devShell activation) to write both outputs.
 
