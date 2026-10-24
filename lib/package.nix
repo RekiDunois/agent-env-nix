@@ -8,6 +8,7 @@
 , exports ? { }
 , mcp ? { }
 , mcpOverrides ? { }
+, mcpPortEnv ? { }
 , enableHarnesses ? [ "codex" ]
 }:
 let
@@ -35,6 +36,11 @@ let
     else if !builtins.isAttrs skills || !builtins.all safeName (builtins.attrNames skills) || !builtins.all safeRelative (builtins.attrValues skills) then
       fail "skills must map safe names to safe package-relative directories"
     else if !builtins.isAttrs agents || !builtins.all safeName (builtins.attrNames agents) then fail "invalid agent names"
+    else if !builtins.isAttrs mcpPortEnv || !builtins.all
+      (name: builtins.isString mcpPortEnv.${name} &&
+        builtins.match "[A-Za-z_][A-Za-z0-9_]*" mcpPortEnv.${name} != null &&
+        builtins.hasAttr name servers && servers.${name} ? url)
+      (builtins.attrNames mcpPortEnv) then fail "mcpPortEnv must map HTTP server names to environment variable names"
     else true;
   evaluated = mcpServers.lib.evalModule pkgs {
     imports = [ mcp mcpOverrides ];
@@ -103,7 +109,7 @@ let
   '') files);
   payloadManifest = pkgs.writeText "agent-env-package.json" (builtins.toJSON {
     schemaVersion = 1;
-    inherit id version skills servers;
+    inherit id version skills servers mcpPortEnv;
     agents = builtins.attrNames agents;
     runtimePackages = map toString runtimePackages;
     dependencies = map (dep: toString dep) agentDependencies;
@@ -112,7 +118,7 @@ let
     nativeBuildInputs = [ pkgs.coreutils pkgs.findutils ];
     passthru.agentEnv = {
       schemaVersion = 1;
-      inherit id version agentDependencies runtimePackages servers;
+      inherit id version agentDependencies runtimePackages servers mcpPortEnv;
       enableHarnesses = harnesses;
       exports = { inherit skills agents; };
     };

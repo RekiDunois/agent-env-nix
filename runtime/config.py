@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ import re
 import stat
 import sys
 import tempfile
+from urllib.parse import urlsplit
 
 import tomlkit
 
@@ -135,6 +137,48 @@ def render_config(document, changes):
     return tomlkit.dumps(result).encode("utf-8")
 
 
+def desired_mcp(manifest, snapshot=parse_toml):
+    """Resolve producer port metadata before ownership checks or cache comparison."""
+    owners = manifest.get("mcpOwners", {})
+    generated = plain(snapshot(Path(manifest["mcpConfig"]))) if owners else {}
+    desired = generated.get("mcp_servers", {})
+    if (set(generated) - {"mcp_servers"} or not isinstance(desired, dict)
+            or set(desired) != set(owners)
+            or any(not isinstance(value, dict) for value in desired.values())):
+        fail("generated MCP keys differ from manifest ownership keys")
+    ports = manifest.get("mcpPortEnv", {})
+    if not isinstance(ports, dict):
+        fail("invalid manifest MCP port environment mapping")
+    for name, variable in ports.items():
+        if (name not in desired or not isinstance(variable, str)
+                or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", variable)):
+            fail("invalid manifest MCP port environment mapping")
+        url = desired[name].get("url")
+        try:
+            if not isinstance(url, str) or any(c.isspace() or ord(c) < 32 for c in url):
+                raise ValueError
+            parsed = urlsplit(url)
+            if (parsed.scheme not in ("http", "https") or not parsed.hostname
+                    or parsed.username is not None or parsed.password is not None
+                    or not re.fullmatch(r"(?:\[[^\[\]]+\]|[^:\[\]\\]+)(?::[0-9]+)?", parsed.netloc)
+                    or parsed.port is not None and not 1 <= parsed.port <= 65535
+                    or "command" in desired[name]):
+                raise ValueError
+        except ValueError:
+            fail(f"MCP key {name}: invalid default HTTP URL for port environment mapping")
+        value = os.environ.get(variable)
+        if value is None:
+            continue
+        # Bound length before int conversion; avoid enormous/untrusted integers.
+        if not re.fullmatch(r"[0-9]{1,5}", value) or not 1 <= int(value) <= 65535:
+            fail(f"MCP key {name}: {variable} must be a decimal port in 1..65535")
+        host = parsed.netloc.rsplit(":", 1)[0] if parsed.port is not None else parsed.netloc
+        authority_start = url.index(":") + 3  # Preserve all original non-port bytes.
+        authority_end = authority_start + len(parsed.netloc)
+        desired[name]["url"] = url[:authority_start] + f"{host}:{int(value)}" + url[authority_end:]
+    return desired
+
+
 def empty_state():
     return {"schemaVersion": SCHEMA, "mcp": {}, "reused": [], "retainRoots": False}
 
@@ -248,13 +292,8 @@ class ConfigEditor:
         old = empty_state() if raw_state is None else validate_state(json.loads(raw_state))
         desired = {}
         self.snapshots = {}
-        if not removing and self.manifest.get("mcpOwners"):
-            generated = plain(self.snapshot(Path(self.manifest["mcpConfig"])))
-            desired = generated.get("mcp_servers", {})
-            if (set(generated) - {"mcp_servers"} or not isinstance(desired, dict)
-                    or set(desired) != set(self.manifest["mcpOwners"])
-                    or any(not isinstance(value, dict) for value in desired.values())):
-                fail("generated MCP keys differ from manifest ownership keys")
+        if not removing:
+            desired = desired_mcp(self.manifest, self.snapshot)
         selected = set(desired) | set(old["mcp"])
         new = empty_state()
         # Once equal unowned config (or legacy reuse) needed roots, there is no
@@ -354,16 +393,22 @@ class ConfigEditor:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("prepare", "commit"))
+    parser.add_argument("phase", choices=("prepare", "commit", "cache-key"))
     parser.add_argument("--manifest", required=True)
-    parser.add_argument("--project", required=True)
-    parser.add_argument("--state", required=True)
-    parser.add_argument("--prepared", required=True)
-    parser.add_argument("--action", choices=("apply", "remove"), required=True)
+    parser.add_argument("--project")
+    parser.add_argument("--state")
+    parser.add_argument("--prepared")
+    parser.add_argument("--action", choices=("apply", "remove"))
     parser.add_argument("--extra-config", action="append", default=[])
     args = parser.parse_args()
     try:
         manifest = json.loads(read_bytes(Path(args.manifest)))
+        if args.phase == "cache-key":
+            value = json.dumps(desired_mcp(manifest), sort_keys=True, separators=(",", ":"))
+            print(hashlib.sha256(value.encode()).hexdigest())
+            return 0
+        if not all((args.project, args.state, args.prepared, args.action)):
+            parser.error("prepare/commit require --project, --state, --prepared and --action")
         editor = ConfigEditor(manifest, args.project, args.extra_config, state_file=args.state)
         prepared = safe_path(Path(args.prepared).absolute())
         if not prepared.parent.is_dir() or prepared.parent.stat().st_mode & 0o077:

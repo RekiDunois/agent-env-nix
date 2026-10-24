@@ -2,6 +2,7 @@
 let
   lib = pkgs.lib;
   cachedFixture = pkgs.writeShellScriptBin "agent-env" ''
+    if [ "$1" = cache-key ]; then printf 'static\n'; exit 0; fi
     test "$#" = 3 && test "$1" = apply && test "$2" = --project || exit 1
     printf '%s\n' "$3" >> "$CALL_LOG"
   '';
@@ -90,6 +91,23 @@ let
     assert !succeeds (empty { mcp.settings.servers.bad = { command = "${pkgs.hello}/../../../usr/bin/server"; }; }).agentEnv.servers;
     assert !succeeds (empty { exports.agents.blank = { description = "  \t\n"; developer_instructions = "Read."; }; }).drvPath;
     assert !succeeds (empty { exports.agents.blank = { description = "Reader"; developer_instructions = "  \t\n"; }; }).drvPath;
+    assert (empty {
+      mcp.settings.servers.http.url = "http://localhost:9090/mcp";
+      mcpPortEnv.http = "TEST_MCP_PORT";
+    }).agentEnv.mcpPortEnv == { http = "TEST_MCP_PORT"; };
+    assert (empty {
+      mcp.settings.servers.http.url = "http://localhost:9090/mcp";
+      mcpPortEnv.http = "TEST_MCP_PORT";
+    }).agentEnv.servers.http == { url = "http://localhost:9090/mcp"; };
+    assert !succeeds (empty { mcpPortEnv.missing = "PORT"; }).drvPath;
+    assert !succeeds (empty {
+      mcp.settings.servers.http.url = "http://localhost:9090/mcp";
+      mcpPortEnv.http = "BAD-NAME";
+    }).drvPath;
+    assert !succeeds (empty {
+      mcp.settings.servers.stdio.command = "${pkgs.hello}/bin/hello";
+      mcpPortEnv.stdio = "PORT";
+    }).drvPath;
     assert !succeeds (empty { mcp.settings.model = "unexpected"; }).agentEnv.servers;
     true;
 in
@@ -107,7 +125,7 @@ in
   '';
 
   cached-activation = pkgs.runCommand "agent-env-cached-activation-test" {
-    nativeBuildInputs = [ pkgs.python3 pkgs.bash pkgs.coreutils ];
+    nativeBuildInputs = [ python pkgs.bash pkgs.coreutils ];
   } ''
     cp -R ${../runtime} runtime
     cp -R ${../tests} tests

@@ -5,6 +5,11 @@ umask 077
 die() { printf 'agent-env: %s\n' "$*" >&2; exit 1; }
 usage() { printf 'usage: agent-env apply|remove --project PATH [--extra-config FILE]\n' >&2; exit 2; }
 action=${1:-}; [ "$#" -gt 0 ] && shift
+if [ "$action" = cache-key ]; then
+  [ "$#" -eq 0 ] || usage
+  "$python_bin" "$config_helper" cache-key --manifest "$manifest"
+  exit
+fi
 case "$action" in apply|remove) ;; *) usage ;; esac
 project_arg=
 extra=()

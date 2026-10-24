@@ -46,7 +46,12 @@ trap 'exit 143' TERM
 trap 'exit 129' HUP
 
 [[ ! -L $marker && ( ! -e $marker || -f $marker ) ]] || fail "success marker must be a regular file: $marker"
-expected=$(printf 'v1\n%s\n%s' "$environment" "$project")
+# Resolve the same effective MCP values used by prepare, before any cache hit.
+if ! mcp_key=$("$environment/bin/agent-env" cache-key); then
+  "$coreutils/rm" -f -- "$marker"
+  exit 1
+fi
+expected=$(printf 'v2\n%s\n%s\n%s' "$environment" "$project" "$mcp_key")
 if [[ $force == false && -f $marker && $(<"$marker") == "$expected" ]]; then
   exit 0
 fi
