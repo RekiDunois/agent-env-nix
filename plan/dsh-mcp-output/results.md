@@ -58,10 +58,12 @@ real MCP service, plugin, model or user configuration was used.
 
 Environment: the repository's own devShell (`nix develop`) provides the
 Python 3.14.7 and tomlkit 0.15.0 used below. This differs from the cloud record's
-isolated Python 3.12.14/tomlkit 0.13.3; both satisfy the plan's tomlkit
-requirement, and the pinned 3.12.13/tomlkit 0.13.3 combination was also run for
-the T1–T4 file and the affected config file with the same results. The affected
-cache file needs the devShell's GNU coreutils, so it was run only there.
+isolated Python 3.12.14/tomlkit 0.13.3. The local `uv` interpreter reported
+Python 3.12.13 with tomlkit 0.13.3, and that combination was also run for the
+T1–T4 file and the affected config file with the same results; the two hosts
+therefore used slightly different patch versions, both satisfying the plan's
+tomlkit requirement. The affected cache file needs the devShell's GNU coreutils,
+so it was run only there.
 Raw logs: `/tmp/agent-env-dsh-test.NeiOWA`,
 delivery outputs and build links: `/tmp/agent-env-dsh-delivery.R7pi1o`.
 
@@ -99,7 +101,8 @@ formal commands inside `nix develop`, as the README already instructs; the test
 itself was not weakened or skipped.
 
 Original failure output was observed in the terminal before the path correction
-and was not written to a file; the retained `final-cached.log` is the reproducible
+and was not written to a file, so that attempt cannot be re-inspected; only the
+observation is recorded. The retained `final-cached.log` is the reproducible
 bare-host failure from BSD `mv`, and the retained post-fix logs are
 `t1-t4-dsh-devshell.log`, `affected-activate-devshell.log` and
 `affected-cached-devshell.log`. No product code was changed for these harness
@@ -123,8 +126,19 @@ code and recorded output, without rerunning tests:
 
 - P3 execution plan approved; P1–P4 PASS. Exact plan SHA256:
   5f2d3968307b4309d6bbc0f075f8028ef5278b0d4e95bcb641aef6a4b81cee82.
+  That hash is the reviewed P3 text at commit 9428b1c. A later documentation
+  commit (1f5de05) reworded the requirement/scope and implementation item 3 to
+  state that skills and agents keep the existing paths and that the DSH MCP
+  output does not inherit Codex TOML MCP configuration. No owner, mechanism,
+  change point or compatibility decision changed; the current file hash is
+  c16ba77a2c5c8be1fdbb4f3e72ace3f8ef114666f5633d6d114f72585f80c8a3.
 - T4 Gate1/Gate2 PASS. Exact test plan SHA256:
   38363ae7c982c3af9a66c48b2c28a72e615c5922ab912e00b4644f0593007a04.
+  That hash is the reviewed T4 text. The 2026-10-25 wiring and environment notes
+  appended to the file only record the temporary-root resolution and the T5 host;
+  the must-test list, recipes and acceptance conditions are unchanged. The
+  current test plan hash is
+  76c885d9fbfb552b5bf66670cf147a6240e4146c38d6062ee7e6f39564baa0e5.
 - Static implementation and external fixture review: no remaining blocker.
 - Gate3 limited result: host T1–T4 PASS, reusing unaffected original results plus
   the scoped fallback and mapping reruns. T5 installed Nix delivery and built
