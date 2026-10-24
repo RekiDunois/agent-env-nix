@@ -1,9 +1,11 @@
 """Offline wrapper checks with a stub installer; no Nix build or real install."""
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
 import unittest
 
 
@@ -18,6 +20,7 @@ class ActivationTest(unittest.TestCase):
         self.lock = self.project / ".agent-env-apply.lock"
         self.log = self.root / "calls"
         self.env = dict(os.environ, CALL_LOG=str(self.log))
+        self.env.pop("TEST_MCP_PORT", None)
         self.a = self.wrapper("environment-a")
         self.b = self.wrapper("environment-b")
 
@@ -27,6 +30,7 @@ class ActivationTest(unittest.TestCase):
         installer = environment / "bin/agent-env"
         installer.write_text(
             f'#!{shutil.which("bash")}\nset -eu\n'
+            'if [[ $1 == cache-key ]]; then printf "static\\n"; exit; fi\n'
             '[[ $1 == apply && $2 == --project && $# == 3 ]]\n'
             'printf "%s\\n" "$3" >> "$CALL_LOG"\n'
             '[[ ${FAIL_APPLY:-0} != 1 ]]\n'
@@ -50,6 +54,60 @@ class ActivationTest(unittest.TestCase):
 
     def calls(self):
         return self.log.read_text().splitlines() if self.log.exists() else []
+
+    def test_real_port_resolver_cache_and_literal_publication(self):
+        environment = self.root / "environment-a"
+        config = environment / "mcp.toml"
+        config.write_text('[mcp_servers.demo]\nurl = "http://localhost:9090/mcp"\n')
+        manifest = environment / "manifest.json"
+        manifest.write_text(json.dumps({"schemaVersion": 1, "mcpConfig": str(config),
+                                       "mcpOwners": {"demo": "producer"},
+                                       "mcpPortEnv": {"demo": "TEST_MCP_PORT"}}))
+        helper = Path(__file__).resolve().parents[1] / "runtime/config.py"
+        installer = environment / "bin/agent-env"
+        installer.write_text(f'''#!{sys.executable}
+import importlib.util, json, os, pathlib, sys
+spec = importlib.util.spec_from_file_location("config", {str(helper)!r})
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+manifest_path = {str(manifest)!r}
+if sys.argv[1] == "cache-key":
+    sys.argv = [sys.argv[0], "cache-key", "--manifest", manifest_path]
+    sys.exit(m.main())
+project = pathlib.Path(sys.argv[3])
+with open(os.environ["CALL_LOG"], "a") as log:
+    log.write(str(project) + "\\n")
+if os.environ.get("FAIL_APPLY") == "1":
+    sys.exit(1)
+(project / ".agent-env-nix").mkdir(mode=0o700, exist_ok=True)
+editor = m.ConfigEditor(json.loads(pathlib.Path(manifest_path).read_text()), project,
+                        system_config=project / "absent-system.toml")
+editor.commit(editor.prepare())
+''')
+        self.env["HOME"] = str(self.root / "home")
+        self.env["CODEX_HOME"] = str(self.root / "home/.codex")
+        self.run_activation()
+        self.env["TEST_MCP_PORT"] = "09090"
+        self.run_activation()  # Same effective URL: a cache hit.
+        self.assertEqual(len(self.calls()), 1)
+        self.env["TEST_MCP_PORT"] = "8000"
+        self.run_activation()
+        self.assertEqual(len(self.calls()), 2)
+        self.assertIn('url = "http://localhost:8000/mcp"',
+                      (self.project / ".codex/config.toml").read_text())
+        before = (self.project / ".codex/config.toml").read_bytes()
+        self.env["TEST_MCP_PORT"] = ""
+        self.run_activation(success=False)
+        self.assertFalse(self.marker.exists())
+        self.assertEqual((self.project / ".codex/config.toml").read_bytes(), before)
+        self.assertEqual(len(self.calls()), 2)
+        self.env["TEST_MCP_PORT"] = "8001"
+        self.env["FAIL_APPLY"] = "1"
+        self.run_activation(success=False)
+        self.assertFalse(self.marker.exists())
+        del self.env["FAIL_APPLY"]
+        self.run_activation()
+        self.assertEqual(len(self.calls()), 4)
 
     def test_first_skip_upgrade_force(self):
         self.run_activation()

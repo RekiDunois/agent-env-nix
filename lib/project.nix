@@ -105,6 +105,10 @@ let
     skillsInstaller = "${skillsInstaller}/bin/agent-env-stage-skills";
     inherit skills agents;
     mcpConfig = toString mcpConfig;
+    mcpPortEnv = lib.foldlAttrs (acc: serverName: record:
+      acc // lib.optionalAttrs (builtins.hasAttr serverName (record.package.agentEnv.mcpPortEnv or { })) {
+        ${serverName} = record.package.agentEnv.mcpPortEnv.${serverName};
+      }) { } mcpRecords;
     mcpOwners = lib.mapAttrs (_: record: record.owner) mcpRecords;
     packages = map (entry: {
       inherit (entry.package.agentEnv) id version;

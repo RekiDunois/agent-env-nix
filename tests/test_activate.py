@@ -57,6 +57,90 @@ class ConfigTests(unittest.TestCase):
     def assert_no_published(self):
         self.assertFalse((self.project / ".agent-env-nix/mcp-state.json").exists())
 
+    def port_server(self, url="http://127.0.0.1:9090/mcp"):
+        self.mcp.write_text(tomlkit.dumps({"mcp_servers": {"fetch": {"url": url}}}))
+        self.manifest["mcpPortEnv"] = {"fetch": "TEST_MCP_PORT"}
+        os.environ.pop("TEST_MCP_PORT", None)
+
+    def test_port_default_change_and_prepared_value(self):
+        self.port_server()
+        self.apply()
+        target = self.project / ".codex/config.toml"
+        self.assertEqual(tomlkit.parse(target.read_text())["mcp_servers"]["fetch"],
+                         {"url": "http://127.0.0.1:9090/mcp"})
+        os.environ["TEST_MCP_PORT"] = "12345"
+        runner = self.runner()
+        prepared = runner.prepare()
+        os.environ["TEST_MCP_PORT"] = "invalid after prepare"
+        runner.commit(prepared)
+        self.assertEqual(self.state()["mcp"]["fetch"]["value"],
+                         {"url": "http://127.0.0.1:12345/mcp"})
+        self.assertNotIn("mcpPortEnv", target.read_text())
+        self.assertNotIn("TEST_MCP_PORT", target.read_text())
+
+    def test_port_bounds_ipv6_and_url_parts(self):
+        self.port_server("https://[::1]:9090/mcp/path?key=value#anchor")
+        for port in ("1", "65535", "08080"):
+            os.environ["TEST_MCP_PORT"] = port
+            self.apply()
+            self.assertEqual(self.state()["mcp"]["fetch"]["value"]["url"],
+                             f"https://[::1]:{int(port)}/mcp/path?key=value#anchor")
+        self.port_server("HTTP://localhost/mcp?#")
+        os.environ["TEST_MCP_PORT"] = "8000"
+        self.assertEqual(a.desired_mcp(self.manifest)["fetch"]["url"], "HTTP://localhost:8000/mcp?#")
+        self.port_server("http://localhost/mcp")
+        os.environ["TEST_MCP_PORT"] = "8000"
+        self.assertEqual(a.desired_mcp(self.manifest)["fetch"]["url"], "http://localhost:8000/mcp")
+
+    def test_invalid_port_leaves_configuration_and_state_unchanged(self):
+        self.port_server()
+        self.apply()
+        target = self.project / ".codex/config.toml"
+        state = self.project / ".agent-env-nix/mcp-state.json"
+        before = (target.read_bytes(), state.read_bytes())
+        for value in ("", " ", " 9090", "-1", "0", "65536", "1.5", "abc", "１２３", "9" * 5000):
+            os.environ["TEST_MCP_PORT"] = value
+            with self.subTest(value=value[:10]), self.assertRaises(a.ActivationError):
+                self.apply()
+            self.assertEqual((target.read_bytes(), state.read_bytes()), before)
+
+    def test_invalid_port_declaration_and_default_url(self):
+        for url in ("stdio:thing", "http:///path", "http://host:0/mcp", "http://host:65536/mcp",
+                    "http://host:/mcp", "http://user:pass@host/mcp", "http://host:abc/mcp", "http://host/white space", "http://[::1]suffix/mcp", "http://bad\\host/mcp"):
+            self.port_server(url)
+            with self.subTest(url=url), self.assertRaises(a.ActivationError):
+                self.apply()
+            self.assert_no_published()
+        self.port_server()
+        for mapping in ({"missing": "PORT"}, {"fetch": "BAD-NAME"}, {"fetch": 123}, []):
+            self.manifest["mcpPortEnv"] = mapping
+            with self.assertRaises(a.ActivationError):
+                self.apply()
+        self.manifest.pop("mcpPortEnv")
+        self.mcp.write_text('[mcp_servers.fetch]\nurl = "unchanged legacy URL"\n')
+        self.apply()  # Unmapped values retain legacy behavior.
+
+    def test_resolved_port_preserves_ownership_and_conflicts(self):
+        self.port_server()
+        os.environ["TEST_MCP_PORT"] = "8000"
+        target = self.write(".codex/config.toml", '[mcp_servers.fetch]\nurl = "http://127.0.0.1:8000/mcp"\n')
+        self.apply()
+        self.assertEqual(self.state()["mcp"], {})
+        self.assertTrue(self.state()["reused"])
+        os.environ["TEST_MCP_PORT"] = "8001"
+        with self.assertRaisesRegex(a.ActivationError, "conflicting selected definition"):
+            self.apply()
+        target.unlink()
+        self.apply()
+        target.write_text(target.read_text().replace(":8001/", ":8123/"))
+        with self.assertRaisesRegex(a.ActivationError, "owned value was edited"):
+            self.apply()
+        self.assertIn(":8123/", target.read_text())
+        # Removal does not require the current port environment to be valid.
+        target.write_text(target.read_text().replace(":8123/", ":8001/"))
+        os.environ["TEST_MCP_PORT"] = "invalid"
+        self.remove()
+
     def test_directory_link_preserves_config_edits_and_link(self):
         external = self.base / "external codex"
         external.mkdir()

@@ -56,8 +56,9 @@ Nix-built entrypoint; do not copy the shell implementation into each producer.
 The CLI accepts `--project DIRECTORY` (default: current directory), `--force`,
 and `--help`. `name` only selects the executable and diagnostic prefix.
 
-The cache key is the environment store output plus the physical project path.
-First use, a changed environment or a moved project invokes the existing
+The cache key includes the environment store output, physical project path, and
+a digest of effective MCP configuration (see [activation-time HTTP port](#activation-time-http-port)).
+First use, a changed environment or port, or a moved project invokes the existing
 `agent-env apply --project`; an unchanged successful key skips it. All names
 share one project marker `.agent-env-applied` and lock `.agent-env-apply.lock`.
 A failed apply invalidates the previous success; only successful apply publishes
@@ -207,3 +208,39 @@ Tests are local fixtures. They do not migrate consumer repositories, call live M
 
 [MIT](LICENSE). Upstream dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
+
+
+### Activation-time HTTP port
+
+A producer may declare one environment variable name per HTTP MCP server, separately
+from its native MCP settings:
+
+```nix
+mkAgentPackage {
+  # Other package declarations are unchanged.
+  mcp.settings.servers.personal-knowledge.url = "http://127.0.0.1:9090/mcp";
+  mcpPortEnv.personal-knowledge = "KNOWLEDGE_MCP_PORT";
+}
+```
+
+The consumer sets the variable in its own `flake.nix` devShell, for example
+`KNOWLEDGE_MCP_PORT = "9100";`, before invoking the normal cached activator in
+`shellHook`. No port argument is passed through consumer/package factories.
+The shared activator resolves it during prepare and writes a literal URL into
+`.codex/config.toml`; Codex does not interpolate the variable. The variable only
+selects the configured endpoint: the service must separately listen on that port.
+
+An unset variable keeps the declared URL. A set value must contain 1–5 ASCII decimal
+digits representing 1..65535; empty or invalid values fail activation. Only the URL
+port changes, retaining the host, path, query and fragment. Mapped defaults must
+be HTTP(S) URLs with a hostname, no userinfo, and a valid explicit port if present.
+Unmapped servers retain their existing behavior. Existing MCP ownership, equal
+unowned reuse, conflict and user-edit protections still apply to the resolved URL.
+
+Cached activation includes a hash of the effective MCP configuration, so changing
+the port invalidates the cache without rebuilding the package. Equivalent ports
+(e.g. `09090` and `9090`) share a cache key. Commit uses the prepared values, not a
+second environment read. The cache still does not inspect installed files; after
+manual configuration or directory-link edits, use `--force`. The internal
+`agent-env cache-key` command reads only producer configuration, not project config,
+and does not create project state.
