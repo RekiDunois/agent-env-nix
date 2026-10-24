@@ -3,8 +3,10 @@
 Requirement R1; execution plan P3; current test recipe T4. Repository base
 06a6d1fba76665562b3560cd9976a4767b92aeed, plugin source
 4c7996f3306f198179fe500b8d607716ac1d0da8. Local candidate changes accompany this
-record; final commit is assigned at publication. No Nix or DSH runtime success is
-claimed. Independent Gate3/merge conclusion is separate from this author record.
+record. The 2026-10-24 cloud section recorded no Nix or DSH runtime success; the
+2026-10-25 local Darwin section below executed the T5 delivery recipe with Nix
+2.34.8 and passed. Full DSH harness/tool operation is still not claimed.
+Independent Gate3/merge conclusion is separate from this author record.
 
 ## Plan review
 Independent reviewer reviewed P2 (SHA256
@@ -46,17 +48,73 @@ Commands were run from the candidate repository using
   dsh-mapping-attempt2.log. This fixes a found defect within the existing no-broadening
   requirement; previous results were not used to claim this missing case passed.
 
+## Local Darwin execution, 2026-10-25
+
+Candidate revision 9b2018da8a40615e5fa1619d5a3d3c68536080c1 (branch
+`feat/dsh-mcp-config-output`); host Apple Silicon `Darwin arm64`, Nix 2.34.8.
+The formal T5 recipe from test plan T4 ran on this host because Nix is available
+locally. All projects, HOME, CODEX_HOME and dummy credentials were temporary; no
+real MCP service, plugin, model or user configuration was used.
+
+Environment: the repository's own devShell (`nix develop`) provides the
+Python 3.14.7 and tomlkit 0.15.0 used below. This differs from the cloud record's
+isolated Python 3.12.14/tomlkit 0.13.3; both satisfy the plan's tomlkit
+requirement, and the pinned 3.12.13/tomlkit 0.13.3 combination was also run for
+the T1–T4 file and the affected config file with the same results. The affected
+cache file needs the devShell's GNU coreutils, so it was run only there.
+Raw logs: `/tmp/agent-env-dsh-test.NeiOWA`,
+delivery outputs and build links: `/tmp/agent-env-dsh-delivery.R7pi1o`.
+
+- T1–T4 `-m unittest discover -s tests -p test_dsh_mcp.py -v`: attempt 1, exit 0,
+  5 tests, framework result OK.
+- Affected config `-m unittest discover -s tests -p test_activate.py -v`: exit 0,
+  30 tests, framework result OK.
+- Affected cache `-m unittest discover -s tests -p test_cached_activation.py -v`:
+  exit 0, 8 tests, framework result OK.
+- T5 delivery, exactly the T4 recipe: `nix build .#example-dsh --out-link
+  "$run/dsh"` and `nix build .#example --out-link "$run/codex"` both exit 0;
+  `nix develop --command bash tests/dsh-integration.sh "$run/dsh" "$run/codex"`
+  exit 0 and printed the script's verification line. It observed DSH and Codex
+  carrying the same literal `http://127.0.0.1:18080/mcp`, DSH `type: "http"`,
+  unchanged fetch command, `cwd` equal to the project root, absent
+  `.dsh/mcp.json` for default opt-out, `dshMcp: true` in the built manifest, and
+  owned cleanup on remove. Built environments:
+  `/nix/store/rp9gvm8hq33bbd3xh46nzvsb810yp8k6-agent-environment-dsh-example` and
+  `/nix/store/ic08qr4lj74xxqvxgyg5j4zkcdq3i7fl-agent-environment`.
+- `nix flake check`: all checks passed; `evaluation`, `runtime-unit` (57 tests),
+  `cached-activation` and `upstream-copy` each exit 0 on this revision.
+
+### Test wiring correction found on this host
+
+The first local run failed before any product assertion in three places, all
+from the test harness rather than the product: (1) `tempfile` returns a
+`/var/folders/...` path while macOS `/var` is a symlink to `/private/var`, so the
+tests' expected paths differed from the runtime's resolved project path;
+(2) `tests/test_cached_activation.py` needs GNU coreutils because the generated
+wrapper publishes with `mv -T`, and macOS `/bin/mv` is BSD. The temporary-root
+mismatch was corrected by resolving the temporary directory in the three
+affected test modules (inputs, assertions and expected values unchanged). The
+GNU coreutils requirement is documented in README and satisfied by running the
+formal commands inside `nix develop`, as the README already instructs; the test
+itself was not weakened or skipped.
+
+Original failure output was observed in the terminal before the path correction
+and was not written to a file; the retained `final-cached.log` is the reproducible
+bare-host failure from BSD `mv`, and the retained post-fix logs are
+`t1-t4-dsh-devshell.log`, `affected-activate-devshell.log` and
+`affected-cached-devshell.log`. No product code was changed for these harness
+issues.
+
 ## Unexecuted
-T5 Nix delivery: NOT RUN. No Nix executable is installed in this cloud runtime.
-Existing built-script shell orchestration tests: NOT RUN because their
-AGENT_ENV_ACTIVATION_SCRIPT prerequisite is unavailable. Host Python tests do
-not establish successful Nix evaluation/build or installed activation.
+The earlier cloud record below remains historical. On this local host the T5
+delivery recipe is now executed and passed; full DSH harness/tool calls, plugin
+installation, gateway startup, business MCP calls and x86_64-linux remain outside
+this output-only test scope and are not claimed as verified.
 
 The initial T2 Nix-check recipe was corrected before any run: activation must
 run after build, outside the build sandbox, and the fetch fixture must use
-example.overridden rather than example.base. No failed Nix attempt is omitted;
-none was executed. Full DSH harness/tool calls and Darwin are outside this
-output-only test scope, not claimed as verified.
+example.overridden rather than example.base. No failed Nix attempt is omitted.
+The cloud record follows; it predates the local execution above.
 
 ## Final independent review, 2026-10-24
 
@@ -76,3 +134,11 @@ code and recorded output, without rerunning tests:
 The empty-allowlist finding was checked against Codex's actual tool filtering
 implementation, which retains an explicitly empty allowed set and rejects every
 tool: https://github.com/openai/codex/blob/main/codex-rs/codex-mcp/src/tools.rs#L63-L95.
+
+## Status after the local run
+
+The 2026-10-24 reviewer conclusions above refer to the cloud execution, where T5
+was NOT RUN. The 2026-10-25 local Darwin execution recorded in this file now
+covers T5 delivery and the Nix checks; that earlier NOT RUN statement is history,
+not the current status of this revision. Gate3 on the local results and the merge
+conclusion remain with the independent reviewer, not this author record.
