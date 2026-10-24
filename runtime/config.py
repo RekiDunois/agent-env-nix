@@ -179,6 +179,75 @@ def desired_mcp(manifest, snapshot=parse_toml):
     return desired
 
 
+def dsh_mcp(desired, project):
+    """Project existing declarations; never expand secret-bearing environment values."""
+    result = {}
+    variable = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+    def reference(name):
+        if not isinstance(name, str) or not variable.fullmatch(name):
+            fail("DSH MCP environment reference must name an environment variable")
+        return "${" + name + "}"
+
+    def literal(value):
+        if isinstance(value, str) and "${" in value:
+            fail("DSH MCP literal contains plugin interpolation syntax; use a named environment field")
+        if isinstance(value, list):
+            return [literal(item) for item in value]
+        if isinstance(value, dict):
+            return {key: literal(item) for key, item in value.items()}
+        return value
+
+    for name, source in desired.items():
+        if source.get("enabled") is False:
+            result[name] = {"disabled": True}
+            continue
+        if "enabled_tools" in source or source.get("disabled_tools"):
+            fail(f"MCP key {name}: DSH plugin cannot preserve tool allow/deny filters")
+        value = {}
+        timeout = source.get("tool_timeout_sec")
+        if timeout is not None:
+            milliseconds = timeout * 1000
+            if (not isinstance(milliseconds, (int, float)) or isinstance(milliseconds, bool)
+                    or not 0 < milliseconds <= 9007199254740991
+                    or milliseconds != int(milliseconds)):
+                fail(f"MCP key {name}: DSH tool timeout must be positive whole milliseconds")
+            value["toolCallTimeoutMs"] = int(milliseconds)
+        if "url" in source:
+            value.update(type="http", url=literal(source["url"]))
+            headers = literal(dict(source.get("http_headers", {})))
+            seen = {key.lower() for key in headers}
+            if len(seen) != len(headers):
+                fail(f"MCP key {name}: ambiguous HTTP header names")
+            for key, env_name in source.get("env_http_headers", {}).items():
+                if key.lower() in seen:
+                    fail(f"MCP key {name}: ambiguous HTTP header sources")
+                headers[key] = reference(env_name)
+                seen.add(key.lower())
+            if source.get("bearer_token_env_var"):
+                if "authorization" in seen:
+                    fail(f"MCP key {name}: ambiguous Authorization sources")
+                headers["Authorization"] = "Bearer " + reference(source["bearer_token_env_var"])
+            if headers:
+                value["headers"] = headers
+        else:
+            value.update(type="stdio", command=literal(source["command"]))
+            if "args" in source:
+                value["args"] = literal(source["args"])
+            env = literal(dict(source.get("env", {})))
+            for key in source.get("env_vars", []):
+                ref = reference(key)
+                if key in env:
+                    fail(f"MCP key {name}: ambiguous environment sources")
+                env[key] = ref
+            if env:
+                value["env"] = env
+            cwd = Path(source.get("cwd", str(project)))
+            value["cwd"] = str(cwd if cwd.is_absolute() else project / cwd)
+        result[name] = value
+    return result
+
+
 def empty_state():
     return {"schemaVersion": SCHEMA, "mcp": {}, "reused": [], "retainRoots": False}
 
@@ -219,6 +288,10 @@ def decoded(raw):
 
 
 class ConfigEditor:
+    target_relative = ".codex/config.toml"
+    state_relative = ".agent-env-nix/mcp-state.json"
+    table_key = "mcp_servers"
+
     def __init__(self, manifest, project, extra_configs=(), *, state_file=None, system_config=None):
         self.manifest = manifest
         if manifest.get("schemaVersion") != 1:
@@ -235,10 +308,10 @@ class ConfigEditor:
         if not project.is_dir():
             fail(f"project directory does not exist: {project}")
         self.project = project.resolve(strict=True)
-        self.target = self.project / ".codex/config.toml"
-        self.state_file = self.project / ".agent-env-nix/mcp-state.json"
+        self.target = self.project / self.target_relative
+        self.state_file = self.project / self.state_relative
         if state_file is not None and Path(state_file).absolute() != self.state_file:
-            fail("MCP state must be the project's .agent-env-nix/mcp-state.json")
+            fail("MCP state must be the project's owned state file")
         self.extra_configs = [Path(p).expanduser().absolute() for p in extra_configs]
         self.system_config = (Path("/etc").resolve() / "codex/config.toml"
                               if system_config is None else Path(system_config))
@@ -248,7 +321,20 @@ class ConfigEditor:
         path = Path(os.path.abspath(path))
         if str(path) not in self.snapshots:
             self.snapshots[str(path)] = encoded(read_bytes(path))
-        return parse_toml(path, decoded(self.snapshots[str(path)]))
+        return self.parse_source(path, decoded(self.snapshots[str(path)]))
+
+    def parse_source(self, path, raw):
+        return parse_toml(path, raw)
+
+    def desired(self):
+        if hasattr(self, "resolved_mcp"):
+            # Still snapshot the fixed generated source for publication checks.
+            self.snapshot(Path(self.manifest["mcpConfig"]))
+            return copy.deepcopy(self.resolved_mcp)
+        return desired_mcp(self.manifest, self.snapshot)
+
+    def render(self, document, changes):
+        return render_config(document, changes)
 
     def sources(self):
         candidates = [self.target]
@@ -278,7 +364,7 @@ class ConfigEditor:
                     fail(f"unsupported selected mcp_servers source: profile {name} in {path}")
         managed = self.system_config.parent / "managed_config.toml"
         document = self.snapshot(managed)
-        values = document.get("mcp_servers", {})
+        values = document.get(self.table_key, {})
         if isinstance(values, dict) and set(values) & selected:
             fail(f"unsupported selected managed source: {managed} (mcp_servers)")
 
@@ -293,7 +379,7 @@ class ConfigEditor:
         desired = {}
         self.snapshots = {}
         if not removing:
-            desired = desired_mcp(self.manifest, self.snapshot)
+            desired = self.desired()
         selected = set(desired) | set(old["mcp"])
         new = empty_state()
         # Once equal unowned config (or legacy reuse) needed roots, there is no
@@ -305,7 +391,7 @@ class ConfigEditor:
             sources = self.sources()
             self.check_unsupported(sources, selected)
             document = sources[0][1]
-            table = document.get("mcp_servers", {})
+            table = document.get(self.table_key, {})
             if not isinstance(table, dict):
                 fail(f"mcp_servers must be a table in {self.target}")
             for name in sorted(selected):
@@ -319,7 +405,7 @@ class ConfigEditor:
                     continue
                 others = []
                 for path, source in sources:
-                    values = source.get("mcp_servers", {})
+                    values = source.get(self.table_key, {})
                     if not isinstance(values, dict):
                         fail(f"mcp_servers must be a table in {path}")
                     if name not in values or (owned and path == self.target):
@@ -340,7 +426,7 @@ class ConfigEditor:
             previous = old["mcp"].get(name)
             # Only the observed generated alternative can survive this write;
             # earlier alternatives no longer need to confer ownership.
-            alternatives = [plain(document.get("mcp_servers", {}).get(name))]
+            alternatives = [plain(document.get(self.table_key, {}).get(name))]
             pending["mcp"][name] = {
                 "owner": (new["mcp"].get(name) or previous)["owner"],
                 "value": wanted,
@@ -350,7 +436,7 @@ class ConfigEditor:
         return {"schemaVersion": SCHEMA, "project": str(self.project),
                 "action": "remove" if removing else "apply",
                 "stateSnapshot": encoded(raw_state), "sources": self.snapshots,
-                "rendered": encoded(render_config(document, changes)) if changes else None,
+                "rendered": encoded(self.render(document, changes)) if changes else None,
                 "pendingState": pending, "state": new}
 
     def commit(self, prepared, removing=False):
@@ -391,6 +477,57 @@ class ConfigEditor:
         return new
 
 
+class DshConfigEditor(ConfigEditor):
+    target_relative = ".dsh/mcp.json"
+    state_relative = ".agent-env-nix/dsh-mcp-state.json"
+    table_key = "mcpServers"
+
+    def parse_source(self, path, raw):
+        if path == Path(self.manifest["mcpConfig"]):
+            return parse_toml(path, raw)
+        try:
+            document = {} if raw is None else json.loads(raw.decode("utf-8-sig"))
+        except (ValueError, UnicodeError):
+            fail(f"invalid JSON source: {path}")
+        if not isinstance(document, dict):
+            fail(f"MCP JSON must be an object: {path}")
+        return document
+
+    def sources(self):
+        return [(self.target, self.snapshot(self.target))]
+
+    def check_unsupported(self, sources, selected):
+        # DSH has no Codex inherited TOML sources. Do not hide its fallback file.
+        if getattr(self, "generating", False) and not exists(self.target):
+            fallback = self.project / ".mcp.json"
+            raw = read_bytes(fallback)
+            self.snapshots[str(fallback)] = encoded(raw)
+            if raw is not None:
+                fail("DSH output would hide existing .mcp.json; reconcile project MCP configuration first")
+
+    def desired(self):
+        desired = dsh_mcp(super().desired(), self.project)
+        self.generating = bool(desired)
+        return desired
+
+    def render(self, document, changes):
+        result = copy.deepcopy(document)
+        table = result.setdefault(self.table_key, {})
+        for name, value in changes.items():
+            if value is None:
+                table.pop(name, None)
+            else:
+                table[name] = value
+        return (json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def output_editors(manifest, project, extra_configs=(), state_file=None):
+    editors = [("codex", ConfigEditor(manifest, project, extra_configs, state_file=state_file))]
+    if manifest.get("dshMcp", False) or exists(Path(project).resolve() / DshConfigEditor.state_relative):
+        editors.append(("dsh", DshConfigEditor(manifest, project)))
+    return editors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("phase", choices=("prepare", "commit", "cache-key"))
@@ -404,20 +541,39 @@ def main():
     try:
         manifest = json.loads(read_bytes(Path(args.manifest)))
         if args.phase == "cache-key":
-            value = json.dumps(desired_mcp(manifest), sort_keys=True, separators=(",", ":"))
+            value = json.dumps({"mcp": desired_mcp(manifest), "dshMcp": manifest.get("dshMcp", False)}, sort_keys=True, separators=(",", ":"))
             print(hashlib.sha256(value.encode()).hexdigest())
             return 0
         if not all((args.project, args.state, args.prepared, args.action)):
             parser.error("prepare/commit require --project, --state, --prepared and --action")
-        editor = ConfigEditor(manifest, args.project, args.extra_config, state_file=args.state)
+        editors = output_editors(manifest, args.project, args.extra_config, args.state)
         prepared = safe_path(Path(args.prepared).absolute())
         if not prepared.parent.is_dir() or prepared.parent.stat().st_mode & 0o077:
             fail("prepared MCP plan directory must be private (mode 0700)")
         if args.phase == "prepare":
-            atomic_json(prepared, editor.prepare(args.action == "remove"))
+            resolved = desired_mcp(manifest) if args.action != "remove" else {}
+            plans = {}
+            for kind, editor in editors:
+                editor.resolved_mcp = resolved
+                removing = args.action == "remove" or kind == "dsh" and not manifest.get("dshMcp", False)
+                plans[kind] = editor.prepare(removing)
+            atomic_json(prepared, plans)
         else:
-            result = editor.commit(json.loads(read_bytes(prepared)), args.action == "remove")
-            print("retain-roots" if result["retainRoots"] else "release-roots")
+            plans = json.loads(read_bytes(prepared))
+            if set(plans) != {kind for kind, _ in editors}:
+                fail("prepared MCP outputs differ from this invocation")
+            # Preflight every output before publishing either one. Each editor
+            # also checks immediately before its own replacement.
+            for kind, editor in editors:
+                plan = plans[kind]
+                if read_bytes(editor.state_file) != decoded(plan["stateSnapshot"]):
+                    raise SnapshotChanged("MCP ownership state changed; prepare again")
+                editor.check_snapshots(plan["sources"], "before publication")
+            retain = False
+            for kind, editor in editors:
+                removing = args.action == "remove" or kind == "dsh" and not manifest.get("dshMcp", False)
+                retain |= editor.commit(plans[kind], removing)["retainRoots"]
+            print("retain-roots" if retain else "release-roots")
     except (ActivationError, OSError, ValueError, TypeError, KeyError) as exc:
         # JSON/TOML parser values can contain secrets; report only safe errors.
         message = str(exc) if isinstance(exc, ActivationError) else "cannot read or publish MCP configuration/state"
@@ -428,3 +584,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

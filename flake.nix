@@ -33,6 +33,7 @@
       packages = eachSystem (system: {
         default = examples.${system}.project;
         example = examples.${system}.project;
+        example-dsh = examples.${system}.dshProject;
         example-disabled = examples.${system}.disabledProject;
       });
       apps = eachSystem (system: {
@@ -51,3 +52,4 @@
       formatter = eachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt);
     };
 }
+

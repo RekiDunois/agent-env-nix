@@ -59,9 +59,9 @@ safe_path "$state_dir/lock"
 [ ! -e "$state_dir/lock" ] || [ -f "$state_dir/lock" ] || die 'lock is not a regular file'
 exec 9>"$state_dir/lock"
 flock -x 9
-for path in state.json skills.list agents.list mcp-state.json roots staging pending.json; do safe_path "$state_dir/$path"; done
+for path in state.json skills.list agents.list mcp-state.json dsh-mcp-state.json roots staging pending.json; do safe_path "$state_dir/$path"; done
 [ ! -e "$state_dir/pending.json" ] || die 'old pending publication exists; resolve it with the previous agent-env version first'
-for file in state.json skills.list agents.list mcp-state.json; do
+for file in state.json skills.list agents.list mcp-state.json dsh-mcp-state.json; do
   [ ! -e "$state_dir/$file" ] || [ -f "$state_dir/$file" ] || die "state file is not regular: $file"
 done
 for directory in roots staging; do
@@ -205,3 +205,4 @@ else
   printf 'agent-env: retained previous GC roots for preserved configuration or legacy reused content.\n'
 fi
 printf 'agent-env: %s completed.\n' "$action"
+
