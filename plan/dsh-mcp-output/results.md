@@ -64,8 +64,8 @@ T1–T4 file and the affected config file with the same results; the two hosts
 therefore used slightly different patch versions, both satisfying the plan's
 tomlkit requirement. The affected cache file needs the devShell's GNU coreutils,
 so it was run only there.
-Raw logs: `/tmp/agent-env-dsh-test.NeiOWA`,
-delivery outputs and build links: `/tmp/agent-env-dsh-delivery.R7pi1o`.
+Raw logs, delivery outputs and build links were kept outside the repository in a
+temporary run directory; they are not committed.
 
 - T1–T4 `-m unittest discover -s tests -p test_dsh_mcp.py -v`: attempt 1, exit 0,
   5 tests, framework result OK.
@@ -85,6 +85,42 @@ delivery outputs and build links: `/tmp/agent-env-dsh-delivery.R7pi1o`.
   `/nix/store/ic08qr4lj74xxqvxgyg5j4zkcdq3i7fl-agent-environment`.
 - `nix flake check`: all checks passed; `evaluation`, `runtime-unit` (57 tests),
   `cached-activation` and `upstream-copy` each exit 0 on this revision.
+
+### Real DSH harness check with a public MCP server
+
+Beyond the output-only scope, one real harness run was made on the same host to
+close the earlier "plugin runtime compatibility not verified" gap. It used the
+public, unauthenticated, read-only documentation server
+`https://developers.openai.com/mcp` (`openai-docs-mcp` 1.0.0), which exposes
+`search_openai_docs`, `list_openai_docs`, `fetch_openai_doc`,
+`list_api_endpoints` and `get_openapi_spec`. A disposable project contained only
+the generated `.dsh/mcp.json` pointing at that URL, and the pinned plugin
+`dsh-workspace-mcp` 0.2.1 was installed into a temporary DSH profile; no user
+profile, existing project or stored credential value was read, copied or changed.
+
+- Protocol reachability: `initialize` returned HTTP 200 with
+  `text/event-stream` and `serverInfo` `openai-docs-mcp` 1.0.0, with the `tools`
+  capability.
+- Plugin mount through its own `mount.js` and the real `dsh-mcp-client`: the log
+  line `starting "openai-docs": streamable-http` was followed by
+  `mounted 1 server(s) ... openai-docs`, with no failed server.
+- Real MCP client call to `list_api_endpoints`: `isError` was false and the
+  result carried real endpoint data.
+- Real headless DSH session: the model called
+  `mcp__openai-docs__list_api_endpoints` with empty arguments; the tool result
+  completed and returned the endpoint listing, and the final message reported
+  237 endpoints with the base URL `https://api.openai.com/v1`.
+
+This establishes the chain generated `.dsh/mcp.json` -> plugin mount -> real
+remote MCP server -> model-invoked tool with real data for one HTTP server. It
+does not establish stdio servers, environment-reference expansion at runtime,
+subagent mounting, gateway operation, business MCP services or x86_64-linux.
+
+The local stdio fixture `mcp-server-fetch` was also mounted and its tool was
+invoked by the model, but the call failed inside that server while spawning a
+helper script with an incompatible host Node runtime. That failure is in the
+third-party server's own dependency, not in the generated configuration or the
+mount path, and is recorded here rather than counted as a product failure.
 
 ### Test wiring correction found on this host
 
