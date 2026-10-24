@@ -14,7 +14,7 @@ Independent reviewer reviewed P2 (SHA256
 Plan conclusion APPROVED. T2 (SHA256
 efe2eca41de17fc27faaeef2b4bf10fff3f533245f48af4c0d0f641522f87ec3): Gate1/Gate2 PASS.
 These verdicts were supplied by the independent reviewer, not the plan author.
-T3 changes only the still-unexecuted T5 recipe as explained in its amendment.
+T3 changed only the then-unexecuted T5 recipe as explained in its amendment.
 The independent reviewer approved its affected Gate2 correction at SHA256
 84c4f8eb08fbe29d7f92465457845321a87833615967a46034e18e0320b2c273.
 
