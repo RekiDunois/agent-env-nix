@@ -244,3 +244,64 @@ second environment read. The cache still does not inspect installed files; after
 manual configuration or directory-link edits, use `--force`. The internal
 `agent-env cache-key` command reads only producer configuration, not project config,
 and does not create project state.
+
+
+## Optional DSH workspace MCP output
+
+`mkProject { inherit pkgs; roots = [ /* existing producer packages */ ]; dshMcp = true; }`
+adds `.dsh/mcp.json` for [lihuabd/dsh-workspace-mcp](https://github.com/lihuabd/dsh-workspace-mcp).
+The default is `false`: Codex activation stays enabled and unchanged. Skills and
+agents keep the existing `.agents/skills` and `.codex/agents` paths and Codex agent
+format; no second set of agent files is generated. The planned local DSH agent
+compatibility plugin is responsible for reading and executing those definitions;
+its runtime compatibility is not verified by this MCP output option. This option
+only adds MCP configuration and does not install or enable that plugin. Leave
+producer `enableHarnesses` at its existing Codex setting. No producer MCP
+definitions need to be copied or changed. Use the usual generated `agent-env
+apply --project ...` (or existing devShell activation) to write both outputs.
+
+The projection uses the same selected MCP owners and resolves `mcpPortEnv` once
+at activation, so both files contain the same concrete HTTP URL/port. For example:
+
+```json
+{"mcpServers":{"knowledge":{"type":"http","url":"http://127.0.0.1:9090/mcp"}}}
+```
+
+Install/enable the workspace MCP plugin in your own DSH profile separately. The
+supported contract here is plugin commit
+`4c7996f3306f198179fe500b8d607716ac1d0da8`, default project search paths and
+`searchParents: false`. The plugin reads configuration when creating a session;
+start a new DSH session after activation changes. Its mounted server namespace
+normalizes punctuation/long names; the generated JSON retains the producer keys.
+
+- HTTP `url` and static headers become `type: "http"`, `url`, `headers`.
+- Named `env_http_headers` and `bearer_token_env_var` become `${VAR}` / `Bearer ${VAR}`
+  references. Stdio `env_vars` similarly become environment references. Activation
+  does not read these secret values. Allow the required variable names in the
+  plugin profile's `envAllowlist` (or provide profile `env`) and supply values to
+  the DSH process. No credential or profile setup is performed by Nix activation.
+- Stdio fixed `command`, `args` and explicit `env` are preserved. `cwd` is made
+  absolute against the activated project, including the default project cwd,
+  because the plugin otherwise interprets it relative to `.dsh/`.
+- `enabled = false` becomes `disabled: true`; `tool_timeout_sec` becomes positive
+  whole `toolCallTimeoutMs`. Codex `required` and startup timeouts remain Codex-only
+  settings: DSH uses its own profile startup/failure policy.
+- Codex tool allowlists (including an explicit empty list) and nonempty deny lists cannot be preserved by this plugin and
+  cause preflight failure rather than silently expose additional tools. Literal
+  `${...}` in fields the plugin expands is also rejected; use the named environment
+  fields for intentional references. Conflicting header/environment sources and
+  nonrepresentable tool timeouts fail without printing their values.
+
+Existing `.dsh/mcp.json` unrelated keys/servers are preserved. Unequal same-name
+or manually edited managed definitions cause a conflict; equal unowned definitions
+are reused without claiming ownership. Creating `.dsh/mcp.json` when a project
+`.mcp.json` already exists is refused, because the plugin would otherwise silently
+hide that fallback. Reconcile existing configuration explicitly first; activation
+never deletes or edits `.mcp.json`. Custom plugin search paths/parent lookup and
+global profile precedence remain user configuration, not inferred by the exporter.
+
+Turning the option off or running `remove` removes only unchanged owned DSH entries.
+It does not remove unrelated entries, the directory, or equivalent unowned entries.
+Empty JSON containers may remain. Codex and DSH files are individually atomic,
+not a multi-file transaction; a new activation safely reconciles interrupted writes
+using the existing generated-value ownership bookkeeping and project lock.

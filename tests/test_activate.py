@@ -17,7 +17,8 @@ SPEC.loader.exec_module(a)
 class ConfigTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
-        self.base = Path(self.temporary.name)
+        # macOS /var is a symlink to /private/var; compare against the physical path.
+        self.base = Path(self.temporary.name).resolve()
         self.project = self.base / "project"
         self.project.mkdir()
         (self.project / ".agent-env-nix").mkdir(mode=0o700)

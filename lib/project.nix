@@ -1,5 +1,5 @@
 { lib, agentSkills, mcpServers }:
-{ pkgs, roots, name ? "agent-environment" }:
+{ pkgs, roots, name ? "agent-environment", dshMcp ? false }:
 let
   fail = message: throw "agent-env-nix: ${message}";
   metadata = package:
@@ -103,7 +103,7 @@ let
     environment = "@AGENT_ENV_OUTPUT@";
     nixStore = "${pkgs.nix}/bin/nix-store";
     skillsInstaller = "${skillsInstaller}/bin/agent-env-stage-skills";
-    inherit skills agents;
+    inherit skills agents dshMcp;
     mcpConfig = toString mcpConfig;
     mcpPortEnv = lib.foldlAttrs (acc: serverName: record:
       acc // lib.optionalAttrs (builtins.hasAttr serverName (record.package.agentEnv.mcpPortEnv or { })) {
@@ -117,6 +117,7 @@ let
     }) (builtins.attrValues graph);
   });
 in
+assert lib.assertMsg (builtins.isBool dshMcp) "agent-env-nix: dshMcp must be a boolean";
 # Force collision and graph checks even when callers only inspect drvPath.
 builtins.deepSeq (builtins.attrNames skills ++ builtins.attrNames agents ++ builtins.attrNames servers)
   (pkgs.runCommand name {
@@ -133,4 +134,5 @@ builtins.deepSeq (builtins.attrNames skills ++ builtins.attrNames agents ++ buil
       --prefix PATH : ${lib.makeBinPath [ pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.jq pkgs.flock ]} \
       --add-flags "$out/lib/activate.sh"
   '')
+
 

@@ -22,6 +22,14 @@ let
     # A named upstream server; the library does not copy its implementation.
     mcp.programs.fetch.enable = true;
   };
+  remote = agentLib.mkAgentPackage {
+    inherit pkgs;
+    id = "example-dsh-remote";
+    version = "0.1.0";
+    files = { };
+    mcp.settings.servers.remote.url = "http://127.0.0.1:9090/mcp";
+    mcpPortEnv.remote = "TEST_DSH_PORT";
+  };
   # A real override, including the upstream named module's package/args path.
   overridden = tools.override {
     mcpOverrides = { lib, ... }: {
@@ -32,9 +40,16 @@ in
 {
   inherit base tools overridden;
   project = agentLib.mkProject { inherit pkgs; roots = [ base overridden ]; };
+  dshProject = agentLib.mkProject {
+    inherit pkgs;
+    name = "agent-environment-dsh-example";
+    roots = [ overridden remote ];
+    dshMcp = true;
+  };
   disabledProject = agentLib.mkProject {
     inherit pkgs;
     name = "agent-environment-disabled";
     roots = [ (base.override { enableHarnesses = [ ]; }) ];
   };
 }
+
