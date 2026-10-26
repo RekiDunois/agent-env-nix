@@ -80,6 +80,8 @@ These were run to confirm the two prepared assets, not as added test obligations
 - `nix develop --command python3 -m unittest discover -s tests -p test_dsh_mcp.py -v`
   (6 tests) and `... -p test_activate.py -v` (30 tests): both OK.
 - `nix flake check --no-build --all-systems`: all checks passed (evaluation only).
+  Log: `/tmp/agent-env-harness-proxy.vA1uBU/nix-flake-check.log` (52 lines, ends
+  `all checks passed!`). This overlaps the recorded rows above and adds no target.
 
 The first runtime-unit failure is kept in the record rather than replaced by the
 later pass.
