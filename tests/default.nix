@@ -63,6 +63,15 @@ let
   }; };
   dshRoot = diamond.override { enableHarnesses = [ "dsh" ]; };
   mixedProject = agentLib.mkProject { inherit pkgs; roots = [ dshRoot other ]; };
+  inheritedDsh = empty { id = "inherited-dsh"; agentDependencies = [ example.overridden ]; };
+  inheritedDshRoot = inheritedDsh.override { enableHarnesses = [ "dsh" ]; };
+  inheritedDshProject = agentLib.mkProject { inherit pkgs; roots = [ inheritedDshRoot ]; };
+  sharedCodex = empty { id = "shared-codex"; agentDependencies = [ example.overridden ]; };
+  sharedDsh = empty { id = "shared-dsh"; agentDependencies = [ example.overridden ]; };
+  sharedProject = agentLib.mkProject {
+    inherit pkgs;
+    roots = [ (sharedCodex.override { enableHarnesses = [ "codex" ]; }) (sharedDsh.override { enableHarnesses = [ "dsh" ]; }) ];
+  };
   proxyFixture = empty {
     mcp.settings.servers = {
       browser.url = "http://127.0.0.1:9090/chrome-devtools/";
@@ -86,6 +95,12 @@ let
     assert lib.sort builtins.lessThan mixedProject.graph.example-base.enableHarnesses == [ "codex" "dsh" ];
     assert dshRoot.drvPath == diamond.drvPath;
     assert (agentLib.mkProject { inherit pkgs; roots = [ (example.tools.override { enableHarnesses = [ "dsh" ]; }) ]; }).mcpHarnesses.fetch == [ "dsh" ];
+    assert (agentLib.mkProject { inherit pkgs; roots = [ inheritedDsh ]; }).mcpHarnesses.fetch == [ "codex" ];
+    assert inheritedDshProject.mcpHarnesses.fetch == [ "dsh" ];
+    assert inheritedDshProject.servers.fetch == example.overridden.agentEnv.servers.fetch;
+    assert lib.sort builtins.lessThan sharedProject.mcpHarnesses.fetch == [ "codex" "dsh" ];
+    assert builtins.attrNames sharedProject.servers == [ "fetch" ];
+    assert sharedProject.servers.fetch == example.overridden.agentEnv.servers.fetch;
     assert builtins.attrNames proxyProject.proxyBackends == [ "browser" "local" ];
     assert proxyProject.proxyBackends.browser.args == [ "--managed" ];
     assert proxyProject.proxyBackends.local.command == "${pkgs.hello}/bin/hello";
