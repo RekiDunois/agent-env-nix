@@ -34,10 +34,18 @@ Raw output: `/tmp/agent-env-harness-proxy.vA1uBU` (outside the repository).
 
 ## Commands and results
 
-Tested revision `299c9b9d54c8bcb22802afed37c4056b060c5fe7`. Attribute names in
-the approved recipe are `x86_64-linux`; they were substituted with
-`aarch64-darwin` because that is the only system where this host has Nix. Inputs,
-expectations and observations are unchanged.
+Tested revision `33f26bc0639a19a150a679211c81f96eb8e578f3`; the first pass ran on
+the working tree that became `299c9b9`, and the recorded rows below were repeated
+from a clean detached checkout of `33f26bc` (`git worktree add /tmp/agent-env-harness-proxy-clean 33f26bc`)
+so no row depends on uncommitted state. Attribute names in the approved recipe are
+`x86_64-linux`; they were substituted with `aarch64-darwin` because that is the
+only system where this host has Nix. Inputs, expectations and observations are
+unchanged.
+
+These rows are preparation-time runs by the local test engineer, before Gate 2.
+They do not replace the Gate 3 run: after Gate 2 the local execution engineer runs
+the same recipe formally and records the result. Raw output:
+`/tmp/agent-env-harness-proxy.vA1uBU`.
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -61,13 +69,17 @@ These were run to confirm the two prepared assets, not as added test obligations
 - `nix build .#checks.aarch64-darwin.runtime-unit`: first attempt failed 5 of 58
   tests with `invalid manifest MCP harness selection`, all in
   `test_shell_activation`. That is the fixture defect corrected above. After the
-  correction the same check ran 58 tests, OK. The same command on baseline
-  `5e92248` ran 57 tests, OK, which confirms the five failures came from the new
-  manifest field, not from a product change.
+  correction the same check ran 58 tests, OK. The same command on a detached
+  baseline `5e92248` checkout ran 57 tests, OK; that log is
+  `/tmp/baseline-runtime-unit.log` (63 lines, ends `Ran 57 tests … OK`), and the
+  repository arithmetic agrees (baseline 30+8+5+7+7, current 30+8+6+7+7). It
+  confirms the five failures came from the new manifest field, not from a product
+  change.
 - `nix build .#checks.aarch64-darwin.cached-activation` (8 tests) and
   `nix build .#checks.aarch64-darwin.upstream-copy`: both exit 0.
 - `nix develop --command python3 -m unittest discover -s tests -p test_dsh_mcp.py -v`
   (6 tests) and `... -p test_activate.py -v` (30 tests): both OK.
+- `nix flake check --no-build --all-systems`: all checks passed (evaluation only).
 
 The first runtime-unit failure is kept in the record rather than replaced by the
 later pass.
@@ -80,11 +92,14 @@ plan excludes them. Documentation item 4 was checked by reading the final diff
 against P3 and the user requirement: README removes the public `dshMcp` flag in
 favour of root `enableHarnesses`, states the migration error, and explains that the
 two JSON files are read-only outputs for manual merge with no secret reading and no
-service deployment. The `dshMcp` migration error itself evaluates to a failure
-(`builtins.tryEval` returns `success = false`), as intended.
+service deployment. The `dshMcp` migration error was also evaluated directly: a
+project built with `dshMcp = true` fails with
+`error: agent-env-nix: replace mkProject.dshMcp with rootPackage.override { enableHarnesses = [ "codex" "dsh" ]; }`
+(saved in `/tmp/agent-env-harness-proxy.vA1uBU/dshmcp-migration-error.txt`), and
+`builtins.tryEval` reports `success = false`.
 
 ## Status
 
 The Nix and runtime items that `review-results.md` listed as NOT RUN now have
-results on the recorded revision. Gate3 acceptance and merge readiness remain with
-the independent reviewer.
+preparation-time results on the recorded revision. Gate 2, the formal Gate 3 run by
+the local execution engineer, and merge readiness remain with their owners.
