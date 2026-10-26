@@ -43,8 +43,7 @@ in
   dshProject = agentLib.mkProject {
     inherit pkgs;
     name = "agent-environment-dsh-example";
-    roots = [ overridden remote ];
-    dshMcp = true;
+    roots = map (package: package.override { enableHarnesses = [ "codex" "dsh" ]; }) [ overridden remote ];
   };
   disabledProject = agentLib.mkProject {
     inherit pkgs;
@@ -52,4 +51,5 @@ in
     roots = [ (base.override { enableHarnesses = [ ]; }) ];
   };
 }
+
 

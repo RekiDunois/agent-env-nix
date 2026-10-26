@@ -9,6 +9,7 @@
 , mcp ? { }
 , mcpOverrides ? { }
 , mcpPortEnv ? { }
+, proxyBackends ? { }
 , enableHarnesses ? [ "codex" ]
 }:
 let
@@ -31,7 +32,10 @@ let
     else if overlapping then fail "files destinations overlap"
     else if !builtins.isList agentDependencies || !builtins.isList runtimePackages || !builtins.all lib.isDerivation runtimePackages then
       fail "agentDependencies must be a list; runtimePackages must be a list of derivations"
-    else if !builtins.isList enableHarnesses || !builtins.all (h: h == "codex") enableHarnesses then fail "only codex is supported; use [] to disable projection"
+    else if !builtins.isList enableHarnesses || !builtins.all (h: builtins.elem h [ "codex" "dsh" ]) enableHarnesses then fail "supported harnesses are codex and dsh; use [] to disable projection"
+    else if !builtins.isAttrs proxyBackends || !builtins.all
+      (name: builtins.hasAttr name servers && safeName name) (builtins.attrNames proxyBackends) then
+      fail "proxyBackends must map owned MCP names to backend definitions"
     else if unknownExports != [ ] then fail "unknown exports: ${lib.concatStringsSep ", " unknownExports}"
     else if !builtins.isAttrs skills || !builtins.all safeName (builtins.attrNames skills) || !builtins.all safeRelative (builtins.attrValues skills) then
       fail "skills must map safe names to safe package-relative directories"
@@ -53,6 +57,19 @@ let
   servers = if extra != { } then fail "MCP module may set settings.servers only"
     else builtins.seq evaluated.config.configFile
       (lib.mapAttrs (normalizeMcp id) evaluated.config.settings.servers);
+  backends = lib.mapAttrs (name: backend:
+    let
+      allowed = [ "command" "args" "env" "lazyStart" "idleTimeout" "options" ];
+      options = backend.options or { };
+      normalized = normalizeMcp id name (builtins.intersectAttrs { command = null; args = null; env = null; } backend);
+      valid = builtins.isAttrs backend && builtins.all (key: builtins.elem key allowed) (builtins.attrNames backend)
+        && backend ? command && builtins.isAttrs options
+        && builtins.all (key: builtins.elem key [ "autoReconnect" "disabled" ] && builtins.isBool options.${key}) (builtins.attrNames options)
+        && (!(backend ? lazyStart) || builtins.isBool backend.lazyStart)
+        && (!(backend ? idleTimeout) || (builtins.isString backend.idleTimeout && backend.idleTimeout != ""));
+    in if !valid then fail "proxy backend ${name}: unsupported definition"
+       else builtins.deepSeq normalized backend
+  ) proxyBackends;
   agentFiles = lib.mapAttrs (name: value:
     if !builtins.isAttrs value || builtins.attrNames value != [ "description" "developer_instructions" ] ||
       !builtins.isString value.description || builtins.match "[[:space:]]*" value.description != null ||
@@ -110,6 +127,7 @@ let
   payloadManifest = pkgs.writeText "agent-env-package.json" (builtins.toJSON {
     schemaVersion = 1;
     inherit id version skills servers mcpPortEnv;
+    proxyBackends = backends;
     agents = builtins.attrNames agents;
     runtimePackages = map toString runtimePackages;
     dependencies = map (dep: toString dep) agentDependencies;
@@ -119,6 +137,7 @@ let
     passthru.agentEnv = {
       schemaVersion = 1;
       inherit id version agentDependencies runtimePackages servers mcpPortEnv;
+      proxyBackends = backends;
       enableHarnesses = harnesses;
       exports = { inherit skills agents; };
     };
@@ -140,5 +159,7 @@ let
   '';
 in
 assert checks;
+builtins.deepSeq backends
 result
+
 

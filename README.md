@@ -246,62 +246,64 @@ manual configuration or directory-link edits, use `--force`. The internal
 and does not create project state.
 
 
-## Optional DSH workspace MCP output
+## Package-level Codex and DSH selection
 
-`mkProject { inherit pkgs; roots = [ /* existing producer packages */ ]; dshMcp = true; }`
-adds `.dsh/mcp.json` for [lihuabd/dsh-workspace-mcp](https://github.com/lihuabd/dsh-workspace-mcp).
-The default is `false`: Codex activation stays enabled and unchanged. Skills and
-agents keep the existing `.agents/skills` and `.codex/agents` paths and Codex agent
-format; no second set of agent files is generated. The planned local DSH agent
-compatibility plugin is responsible for reading and executing those definitions;
-its runtime compatibility is not verified by this MCP output option. This option
-only adds MCP configuration and does not install or enable that plugin. Leave
-producer `enableHarnesses` at its existing Codex setting. No producer MCP
-definitions need to be copied or changed. Use the usual generated `agent-env
-apply --project ...` (or existing devShell activation) to write both outputs.
+Choose harnesses on each top-level package; selections follow its required agent
+dependencies and union at shared dependencies:
 
-The projection uses the same selected MCP owners and resolves `mcpPortEnv` once
-at activation, so both files contain the same concrete HTTP URL/port. For example:
-
-```json
-{"mcpServers":{"knowledge":{"type":"http","url":"http://127.0.0.1:9090/mcp"}}}
+```nix
+environment = agentEnv.mkProject {
+  inherit pkgs;
+  roots = [
+    (research.override { enableHarnesses = [ "codex" "dsh" ]; })
+    (contact.override { enableHarnesses = [ "dsh" ]; })
+  ];
+};
 ```
 
-Install/enable the workspace MCP plugin in your own DSH profile separately. The
-supported contract here is plugin commit
-`4c7996f3306f198179fe500b8d607716ac1d0da8`, default project search paths and
-`searchParents: false`. The plugin reads configuration when creating a session;
-start a new DSH session after activation changes. Its mounted server namespace
-normalizes punctuation/long names; the generated JSON retains the producer keys.
+The default remains `[ "codex" ]`; `[]` disables projection on that root's path.
+A dependency separately selected as a root contributes its own choice. The old
+`mkProject.dshMcp` argument now reports a migration error: remove it and choose
+`enableHarnesses` on roots instead. Unchanged payloads are shared across choices.
 
-- HTTP `url` and static headers become `type: "http"`, `url`, `headers`.
-- Named `env_http_headers` and `bearer_token_env_var` become `${VAR}` / `Bearer ${VAR}`
-  references. Stdio `env_vars` similarly become environment references. Activation
-  does not read these secret values. Allow the required variable names in the
-  plugin profile's `envAllowlist` (or provide profile `env`) and supply values to
-  the DSH process. No credential or profile setup is performed by Nix activation.
-- Stdio fixed `command`, `args` and explicit `env` are preserved. `cwd` is made
-  absolute against the activated project, including the default project cwd,
-  because the plugin otherwise interprets it relative to `.dsh/`.
-- `enabled = false` becomes `disabled: true`; `tool_timeout_sec` becomes positive
-  whole `toolCallTimeoutMs`. Codex `required` and startup timeouts remain Codex-only
-  settings: DSH uses its own profile startup/failure policy.
-- Codex tool allowlists (including an explicit empty list) and nonempty deny lists cannot be preserved by this plugin and
-  cause preflight failure rather than silently expose additional tools. Literal
-  `${...}` in fields the plugin expands is also rejected; use the named environment
-  fields for intentional references. Conflicting header/environment sources and
-  nonrepresentable tool timeouts fail without printing their values.
+Skills remain complete copies in `.agents/skills`; native agent files remain in
+`.codex/agents` for the planned DSH compatibility plugin to reuse. This does not
+install that plugin or claim DSH native-agent runtime compatibility. MCPs are
+registered only for the harnesses selecting their owner: Codex `.codex/config.toml`,
+DSH `.dsh/mcp.json` for `lihuabd/dsh-workspace-mcp` contract
+`4c7996f3306f198179fe500b8d607716ac1d0da8` (default files, `searchParents:false`).
 
-Existing `.dsh/mcp.json` unrelated keys/servers are preserved. Unequal same-name
-or manually edited managed definitions cause a conflict; equal unowned definitions
-are reused without claiming ownership. Creating `.dsh/mcp.json` when a project
-`.mcp.json` already exists is refused, because the plugin would otherwise silently
-hide that fallback. Reconcile existing configuration explicitly first; activation
-never deletes or edits `.mcp.json`. Custom plugin search paths/parent lookup and
-global profile precedence remain user configuration, not inferred by the exporter.
+The existing DSH mapping preserves fixed stdio command/args/env and projects HTTP
+URL/headers. Relative cwd is resolved against the project. Environment names become
+`${VAR}` references, never activation-time secret values; the plugin's profile env/
+envAllowlist must allow them. Enabled/tool-timeout mapping remains, while Codex
+required/startup-timeout remain client policy. Unsupported tool allowlists/nonempty
+deny lists and ambiguous literal variable syntax fail instead of silently broadening
+access. Same-name conflicts and hand edits fail; equal unowned entries are reused
+without ownership. Unrelated JSON keys survive. First creation refuses to hide an
+existing fallback `.mcp.json`. Deselection removes only unchanged owned entries.
+Directory symlinks remain supported; linked config files remain refused. Outputs
+are atomic per file, not a multi-file transaction.
 
-Turning the option off or running `remove` removes only unchanged owned DSH entries.
-It does not remove unrelated entries, the directory, or equivalent unowned entries.
-Empty JSON containers may remain. Codex and DSH files are individually atomic,
-not a multi-file transaction; a new activation safely reconciles interrupted writes
-using the existing generated-value ownership bookkeeping and project lock.
+## Proxy deployment fragments
+
+Every project output contains `mcp-proxy.json` and `mcp-connections.json`. Read them
+from the built environment; activation does not install or merge gateway config.
+`mcp-proxy.json` contains only `mcpServers`, for manual merge into your existing
+RekiDunois/mcp-proxy v2 config. Preserve existing listener/auth settings and other
+servers. Keep the installed environment retained while using its fixed store paths.
+
+Producer `proxyBackends.<owned-mcp-name>` declares a real backend separately from
+its client HTTP URL. Supported fields are fixed store `command`, `args`, static
+`env`, `lazyStart`, `idleTimeout`, and boolean `options.autoReconnect` / `disabled`.
+Explicit metadata takes precedence. For existing stdio definitions, export the
+known command/args/static env as a **disabled draft**. Read the full original client
+and completion notes in `mcp-connections.json`: provide named env_vars yourself and
+resolve cwd/client-policy semantics before enabling. No custom wrapper or guessed
+translation is generated. HTTP-only connections have no invented backend and are
+never redirected into their own gateway endpoint.
+
+Fragments that need operator environment completion stay disabled; fill dedicated
+runtime paths/settings and enable them only after review. Never put secrets in Nix
+expressions/store outputs. This exporter does not read secrets, deploy/start/stop
+services, modify profiles, or overwrite the user's proxy config.

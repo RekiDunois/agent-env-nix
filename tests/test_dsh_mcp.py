@@ -68,6 +68,29 @@ class DshTests(unittest.TestCase):
     def json(self):
         return json.loads(self.target.read_text())
 
+    def test_harness_selection_and_owned_cleanup(self):
+        self.manifest['mcpHarnesses'] = {'kb': ['dsh'], 'fetch': ['codex']}
+        self.write_source()
+        self.cli('prepare'); self.cli('commit')
+        self.assertEqual(set(self.json()['mcpServers']), {'kb'})
+        codex = self.project / '.codex/config.toml'
+        self.assertEqual(set(tomlkit.parse(codex.read_text())['mcp_servers']), {'fetch'})
+        before = self.cli('cache-key').stdout
+        document = self.json()
+        document['mcpServers']['unrelated'] = {'type': 'http', 'url': 'https://other.invalid/mcp'}
+        self.target.write_text(json.dumps(document))
+        self.manifest['mcpHarnesses'] = {'kb': ['codex'], 'fetch': ['dsh']}
+        self.write_source()
+        self.assertNotEqual(before, self.cli('cache-key').stdout)
+        self.cli('prepare'); self.cli('commit')
+        self.assertEqual(set(self.json()['mcpServers']), {'fetch', 'unrelated'})
+        self.assertEqual(set(tomlkit.parse(codex.read_text())['mcp_servers']), {'kb'})
+        self.manifest['mcpHarnesses'] = {'kb': [], 'fetch': []}
+        self.write_source()
+        self.cli('prepare'); self.cli('commit')
+        self.assertEqual(set(self.json()['mcpServers']), {'unrelated'})
+        self.assertEqual(dict(tomlkit.parse(codex.read_text()).get('mcp_servers', {})), {})
+
     def test_normal_shared_projection_and_default_opt_out(self):
         self.cli('prepare'); self.cli('commit')
         values = self.json()['mcpServers']
@@ -162,3 +185,4 @@ class DshTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

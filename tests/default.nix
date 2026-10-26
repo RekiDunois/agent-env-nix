@@ -61,12 +61,54 @@ let
     http_headers = { };
     env_http_headers = { };
   }; };
+  dshRoot = diamond.override { enableHarnesses = [ "dsh" ]; };
+  mixedProject = agentLib.mkProject { inherit pkgs; roots = [ dshRoot other ]; };
+  inheritedDsh = empty { id = "inherited-dsh"; agentDependencies = [ example.overridden ]; };
+  inheritedDshRoot = inheritedDsh.override { enableHarnesses = [ "dsh" ]; };
+  inheritedDshProject = agentLib.mkProject { inherit pkgs; roots = [ inheritedDshRoot ]; };
+  sharedCodex = empty { id = "shared-codex"; agentDependencies = [ example.overridden ]; };
+  sharedDsh = empty { id = "shared-dsh"; agentDependencies = [ example.overridden ]; };
+  sharedProject = agentLib.mkProject {
+    inherit pkgs;
+    roots = [ (sharedCodex.override { enableHarnesses = [ "codex" ]; }) (sharedDsh.override { enableHarnesses = [ "dsh" ]; }) ];
+  };
+  proxyFixture = empty {
+    mcp.settings.servers = {
+      browser.url = "http://127.0.0.1:9090/chrome-devtools/";
+      local.command = "${pkgs.hello}/bin/hello";
+      remote.url = "https://example.invalid/mcp";
+    };
+    proxyBackends.browser = {
+      command = "${pkgs.hello}/bin/hello";
+      args = [ "--managed" ];
+      options.disabled = true;
+    };
+  };
+  proxyProject = agentLib.mkProject { inherit pkgs; roots = [ proxyFixture ]; };
   collision = example.base.override { id = "second-exporter"; };
   materializePathsValid =
     assert !succeeds (empty { files."../unsafe" = ./integration.sh; }).drvPath;
     assert !succeeds (empty { files = { "overlap" = ./integration.sh; "overlap/nested" = ./integration.sh; }; }).drvPath;
     true;
   evaluation =
+    assert (graphOf [ dshRoot ]).example-base.enableHarnesses == [ "dsh" ];
+    assert lib.sort builtins.lessThan mixedProject.graph.example-base.enableHarnesses == [ "codex" "dsh" ];
+    assert dshRoot.drvPath == diamond.drvPath;
+    assert (agentLib.mkProject { inherit pkgs; roots = [ (example.tools.override { enableHarnesses = [ "dsh" ]; }) ]; }).mcpHarnesses.fetch == [ "dsh" ];
+    assert (agentLib.mkProject { inherit pkgs; roots = [ inheritedDsh ]; }).mcpHarnesses.fetch == [ "codex" ];
+    assert inheritedDshProject.mcpHarnesses.fetch == [ "dsh" ];
+    assert inheritedDshProject.servers.fetch == example.overridden.agentEnv.servers.fetch;
+    assert lib.sort builtins.lessThan sharedProject.mcpHarnesses.fetch == [ "codex" "dsh" ];
+    assert builtins.attrNames sharedProject.servers == [ "fetch" ];
+    assert sharedProject.servers.fetch == example.overridden.agentEnv.servers.fetch;
+    assert builtins.attrNames proxyProject.proxyBackends == [ "browser" "local" ];
+    assert proxyProject.proxyBackends.browser.args == [ "--managed" ];
+    assert proxyProject.proxyBackends.local.command == "${pkgs.hello}/bin/hello";
+    assert proxyProject.proxyBackends.local.options.disabled;
+    assert proxyProject.connections.remote.backendSource == "none";
+    assert proxyProject.connections.local.client.command == "${pkgs.hello}/bin/hello";
+    assert !succeeds (empty { proxyBackends.missing.command = "${pkgs.hello}/bin/hello"; }).drvPath;
+    assert !succeeds (proxyFixture.override { proxyBackends.browser.command = "/usr/bin/server"; }).drvPath;
     assert !succeeds (agentLib.mkCachedActivation { inherit pkgs; environment = cachedFixture; name = "../unsafe"; }).drvPath;
     assert example.base.drvPath == disabled.drvPath;
     assert (called.override { enableHarnesses = [ ]; }).agentEnv.enableHarnesses == [ ];
@@ -167,4 +209,5 @@ in
     touch "$out"
   '';
 }
+
 

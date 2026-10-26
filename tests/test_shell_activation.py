@@ -30,6 +30,7 @@ class ShellActivationTests(unittest.TestCase):
         source = next(line.split("=", 1)[1] for line in script.splitlines() if line.startswith("manifest="))
         manifest = json.loads(Path(source).read_text())
         manifest["mcpOwners"] = {}
+        manifest["mcpHarnesses"] = {}
         self.manifest.write_text(json.dumps(manifest))
         self.nix_store = self.bin / "nix-store"
         self.nix_store.write_text(self.shebang + 'set -eu\nenvironment=$2\nshift 2\nwhile [ "$1" != --add-root ]; do shift; done\n[ -L "$2" ] || ln -s -- "$environment" "$2"\n')

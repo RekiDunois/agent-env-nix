@@ -1,5 +1,5 @@
 { lib, agentSkills, mcpServers }:
-{ pkgs, roots, name ? "agent-environment", dshMcp ? false }:
+{ pkgs, roots, name ? "agent-environment", dshMcp ? null }:
 let
   fail = message: throw "agent-env-nix: ${message}";
   metadata = package:
@@ -9,17 +9,17 @@ let
   # Inspect the lazy metadata graph before forcing any dependency payload path.
   # This makes a recursive declaration fail with its dependency path, rather
   # than forcing the derivation's serialized recursive references first.
-  visit = stack: path: state: package:
+  visit = harnesses: stack: path: state: package:
     let
       meta = metadata package;
       current = path ++ [ meta.id ];
       trail = lib.concatStringsSep " -> " current;
-      children = builtins.foldl' (visit (stack ++ [ meta.id ]) current) state meta.agentDependencies;
+      children = builtins.foldl' (visit harnesses (stack ++ [ meta.id ]) current) state meta.agentDependencies;
       identity = "${package.drvPath}:${package.outputName or "out"}:${package.system}";
       previous = children.${meta.id} or null;
       entry = {
         inherit package identity;
-        enableHarnesses = lib.unique ((if previous == null then [ ] else previous.enableHarnesses) ++ meta.enableHarnesses);
+        enableHarnesses = lib.unique ((if previous == null then [ ] else previous.enableHarnesses) ++ harnesses);
         paths = (if previous == null then [ ] else previous.paths) ++ [ trail ];
       };
     in
@@ -28,8 +28,8 @@ let
       fail "conflicting package ${meta.id}: version ${previous.package.agentEnv.version} (${previous.package.drvPath}) via ${lib.concatStringsSep "; " previous.paths}, versus version ${meta.version} (${package.drvPath}) via ${trail}"
     else children // { ${meta.id} = entry; };
   graph = if !builtins.isList roots then fail "roots must be a list"
-    else builtins.foldl' (visit [ ] [ ]) { } roots;
-  selected = builtins.filter (entry: builtins.elem "codex" entry.enableHarnesses) (builtins.attrValues graph);
+    else builtins.foldl' (state: package: visit (metadata package).enableHarnesses [ ] [ ] state package) { } roots;
+  selected = builtins.filter (entry: entry.enableHarnesses != [ ]) (builtins.attrValues graph);
   collect = kind: getValues:
     builtins.foldl' (acc: entry:
       let owner = entry.package.agentEnv.id;
@@ -51,6 +51,29 @@ let
     source = "${record.package}/codex/agents/${agentName}.toml";
   }) agentRecords;
   servers = lib.mapAttrs (_: record: record.value) mcpRecords;
+  mcpHarnesses = lib.mapAttrs (_: record: graph.${record.owner}.enableHarnesses) mcpRecords;
+  explicitBackends = collect "proxy backend" (package: package.agentEnv.proxyBackends or { });
+  proxyBackends = lib.mapAttrs (serverName: record:
+    if builtins.hasAttr serverName explicitBackends then explicitBackends.${serverName}.value
+    else (builtins.intersectAttrs { command = null; args = null; env = null; } record.value)
+      // { options.disabled = true; }
+  ) (lib.filterAttrs (serverName: record: builtins.hasAttr serverName explicitBackends || record.value ? command) mcpRecords);
+  proxyConfig = pkgs.writeText "${name}-mcp-proxy.json" (builtins.toJSON { mcpServers = proxyBackends; });
+  connections = lib.mapAttrs (serverName: record: {
+    inherit (record) owner;
+    client = record.value;
+    enableHarnesses = mcpHarnesses.${serverName};
+    backendSource = if builtins.hasAttr serverName explicitBackends then "explicit"
+      else if record.value ? command then "stdio" else "none";
+    requiredEnvironment = record.value.env_vars or [ ];
+    manualCompletion = if builtins.hasAttr serverName explicitBackends then
+      [ "Review producer backend environment and enable only after operator configuration." ]
+      else if record.value ? command then [
+        "Disabled draft: supply requiredEnvironment in the proxy process/config; no secrets were read."
+        "Review original client cwd and client-specific policy; these fields are not translated into the backend fragment."
+      ] else [ "Existing HTTP connection only; no backend command inferred or service redeployed." ];
+  }) mcpRecords;
+  connectionsFile = pkgs.writeText "${name}-mcp-connections.json" (builtins.toJSON connections);
   mcpConfig = mcpServers.lib.mkConfig pkgs {
     flavor = "codex";
     format = "toml";
@@ -103,7 +126,8 @@ let
     environment = "@AGENT_ENV_OUTPUT@";
     nixStore = "${pkgs.nix}/bin/nix-store";
     skillsInstaller = "${skillsInstaller}/bin/agent-env-stage-skills";
-    inherit skills agents dshMcp;
+    inherit skills agents mcpHarnesses;
+    dshMcp = lib.any (harnesses: builtins.elem "dsh" harnesses) (builtins.attrValues mcpHarnesses);
     mcpConfig = toString mcpConfig;
     mcpPortEnv = lib.foldlAttrs (acc: serverName: record:
       acc // lib.optionalAttrs (builtins.hasAttr serverName (record.package.agentEnv.mcpPortEnv or { })) {
@@ -117,16 +141,18 @@ let
     }) (builtins.attrValues graph);
   });
 in
-assert lib.assertMsg (builtins.isBool dshMcp) "agent-env-nix: dshMcp must be a boolean";
+assert lib.assertMsg (dshMcp == null) "agent-env-nix: replace mkProject.dshMcp with rootPackage.override { enableHarnesses = [ \"codex\" \"dsh\" ]; }";
 # Force collision and graph checks even when callers only inspect drvPath.
-builtins.deepSeq (builtins.attrNames skills ++ builtins.attrNames agents ++ builtins.attrNames servers)
+builtins.deepSeq (builtins.attrNames skills ++ builtins.attrNames agents ++ builtins.attrNames servers ++ builtins.attrNames proxyBackends)
   (pkgs.runCommand name {
     nativeBuildInputs = [ pkgs.makeWrapper ];
     passthru = {
-      inherit graph skills agents servers mcpConfig skillBundle skillsInstaller;
+      inherit graph skills agents servers mcpConfig mcpHarnesses proxyBackends proxyConfig connections skillBundle skillsInstaller;
     };
   } ''
     mkdir -p "$out/bin" "$out/lib"
+    cp ${proxyConfig} "$out/mcp-proxy.json"
+    cp ${connectionsFile} "$out/mcp-connections.json"
     cp ${../runtime/config.py} "$out/lib/config.py"
     substitute ${activation} "$out/lib/activate.sh" --replace-fail '@AGENT_ENV_OUTPUT@' "$out"
     substitute ${manifest} "$out/manifest.json" --replace-fail '@AGENT_ENV_OUTPUT@' "$out"
@@ -134,5 +160,6 @@ builtins.deepSeq (builtins.attrNames skills ++ builtins.attrNames agents ++ buil
       --prefix PATH : ${lib.makeBinPath [ pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.jq pkgs.flock ]} \
       --add-flags "$out/lib/activate.sh"
   '')
+
 
 
