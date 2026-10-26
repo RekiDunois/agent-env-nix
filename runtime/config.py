@@ -521,9 +521,20 @@ class DshConfigEditor(ConfigEditor):
         return (json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def selected_mcp(manifest, resolved, harness):
+    selections = manifest.get("mcpHarnesses")
+    if selections is None:  # Previously built manifests retain their original behavior.
+        return resolved if harness == "codex" or manifest.get("dshMcp", False) else {}
+    if (not isinstance(selections, dict) or set(selections) != set(resolved)
+            or any(not isinstance(value, list) or any(h not in ("codex", "dsh") for h in value)
+                   for value in selections.values())):
+        fail("invalid manifest MCP harness selection")
+    return {name: value for name, value in resolved.items() if harness in selections[name]}
+
+
 def output_editors(manifest, project, extra_configs=(), state_file=None):
     editors = [("codex", ConfigEditor(manifest, project, extra_configs, state_file=state_file))]
-    if manifest.get("dshMcp", False) or exists(Path(project).resolve() / DshConfigEditor.state_relative):
+    if "mcpHarnesses" in manifest or manifest.get("dshMcp", False) or exists(Path(project).resolve() / DshConfigEditor.state_relative):
         editors.append(("dsh", DshConfigEditor(manifest, project)))
     return editors
 
@@ -541,7 +552,7 @@ def main():
     try:
         manifest = json.loads(read_bytes(Path(args.manifest)))
         if args.phase == "cache-key":
-            value = json.dumps({"mcp": desired_mcp(manifest), "dshMcp": manifest.get("dshMcp", False)}, sort_keys=True, separators=(",", ":"))
+            value = json.dumps({"mcp": desired_mcp(manifest), "dshMcp": manifest.get("dshMcp", False), "mcpHarnesses": manifest.get("mcpHarnesses")}, sort_keys=True, separators=(",", ":"))
             print(hashlib.sha256(value.encode()).hexdigest())
             return 0
         if not all((args.project, args.state, args.prepared, args.action)):
@@ -554,8 +565,8 @@ def main():
             resolved = desired_mcp(manifest) if args.action != "remove" else {}
             plans = {}
             for kind, editor in editors:
-                editor.resolved_mcp = resolved
-                removing = args.action == "remove" or kind == "dsh" and not manifest.get("dshMcp", False)
+                editor.resolved_mcp = selected_mcp(manifest, resolved, kind) if args.action != "remove" else {}
+                removing = args.action == "remove" or kind == "dsh" and "mcpHarnesses" not in manifest and not manifest.get("dshMcp", False)
                 plans[kind] = editor.prepare(removing)
             atomic_json(prepared, plans)
         else:
@@ -571,7 +582,7 @@ def main():
                 editor.check_snapshots(plan["sources"], "before publication")
             retain = False
             for kind, editor in editors:
-                removing = args.action == "remove" or kind == "dsh" and not manifest.get("dshMcp", False)
+                removing = args.action == "remove" or kind == "dsh" and "mcpHarnesses" not in manifest and not manifest.get("dshMcp", False)
                 retain |= editor.commit(plans[kind], removing)["retainRoots"]
             print("retain-roots" if retain else "release-roots")
     except (ActivationError, OSError, ValueError, TypeError, KeyError) as exc:
@@ -584,4 +595,5 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
