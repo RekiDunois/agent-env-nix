@@ -53,6 +53,13 @@ if ! mcp_key=$("$environment/bin/agent-env" cache-key); then
 fi
 expected=$(printf 'v2\n%s\n%s\n%s' "$environment" "$project" "$mcp_key")
 if [[ $force == false && -f $marker && $(<"$marker") == "$expected" ]]; then
+  # These generated fragments are refreshed even when installation is cached.
+  # Replace linked leaves rather than writing through them.
+  for file in mcp-proxy.json mcp-connections.json; do
+    target="$project/${file%.json}.sample.json"
+    "$coreutils/cp" --remove-destination -T -- "$environment/$file" "$target"
+    printf 'agent-env: exported %s (generated file; overwritten on activation).\n' "$target"
+  done
   exit 0
 fi
 
@@ -62,3 +69,4 @@ fi
 # The private lock directory is on the same filesystem: publish atomically.
 printf '%s\n' "$expected" > "$lock/success"
 "$coreutils/mv" -T -- "$lock/success" "$marker"
+

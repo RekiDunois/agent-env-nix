@@ -77,7 +77,7 @@ finishes. After a crash, remove the stale lock directory only after checking no
 activation is running. Direct `agent-env apply` / `remove` do not participate in
 this lock or update/invalidate the marker: do not run them concurrently with the
 wrapper, and use `agent-env-activate --force` afterward to reapply. Manual edits
-or deletions of installed files likewise require `--force`; the cache does not
+or deletions of installed skills/agents/config likewise require `--force`; the cache does not
 monitor files or bypass the installer's existing configuration protections.
 Old producer-specific PR #96 markers are not reused by this shared wrapper.
 
@@ -287,8 +287,17 @@ are atomic per file, not a multi-file transaction.
 
 ## Proxy deployment fragments
 
-Every project output contains `mcp-proxy.json` and `mcp-connections.json`. Read them
-from the built environment; activation does not install or merge gateway config.
+Every project output contains `mcp-proxy.json` and `mcp-connections.json`.
+Activation copies them as `mcp-proxy.sample.json` and `mcp-connections.sample.json`
+into the directory passed to `--project`: pass the directory
+containing your project's `flake.nix` to place them beside it. Their paths are printed.
+These are generated samples, overwritten from the current store output on every
+activation, including a cached activation. Destination symlinks are replaced,
+not followed. Keep your actual proxy configuration elsewhere and manually merge
+the fragments; activation does not start, restart, or configure the gateway.
+`remove` does not delete these exported copies; these copies do not keep referenced store paths alive
+after the environment is removed. Client port overrides do not rewrite these
+build-time fragments.
 `mcp-proxy.json` contains only `mcpServers`, for manual merge into your existing
 RekiDunois/mcp-proxy v2 config. Preserve existing listener/auth settings and other
 servers. Keep the installed environment retained while using its fixed store paths.
@@ -306,4 +315,5 @@ never redirected into their own gateway endpoint.
 Fragments that need operator environment completion stay disabled; fill dedicated
 runtime paths/settings and enable them only after review. Never put secrets in Nix
 expressions/store outputs. This exporter does not read secrets, deploy/start/stop
-services, modify profiles, or overwrite the user's proxy config.
+services, modify profiles, or merge into the user's separately maintained proxy config.
+

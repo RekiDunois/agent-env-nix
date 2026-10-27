@@ -1,10 +1,16 @@
 { pkgs, agentLib, example }:
 let
   lib = pkgs.lib;
-  cachedFixture = pkgs.writeShellScriptBin "agent-env" ''
+  cachedInstaller = pkgs.writeShellScriptBin "agent-env" ''
     if [ "$1" = cache-key ]; then printf 'static\n'; exit 0; fi
     test "$#" = 3 && test "$1" = apply && test "$2" = --project || exit 1
     printf '%s\n' "$3" >> "$CALL_LOG"
+  '';
+  cachedFixture = pkgs.runCommand "cached-activation-fixture" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${cachedInstaller}/bin/agent-env "$out/bin/agent-env"
+    printf '{"mcpServers":{}}' > "$out/mcp-proxy.json"
+    printf '{}' > "$out/mcp-connections.json"
   '';
   cachedActivation = agentLib.mkCachedActivation {
     inherit pkgs;
@@ -209,5 +215,6 @@ in
     touch "$out"
   '';
 }
+
 
 

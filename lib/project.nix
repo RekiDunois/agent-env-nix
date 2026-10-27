@@ -99,6 +99,8 @@ let
   activation = pkgs.writeText "${name}-activate.sh" (''
     environment=@AGENT_ENV_OUTPUT@
     manifest=@AGENT_ENV_OUTPUT@/manifest.json
+    proxy_config=${proxyConfig}
+    connections_file=${connectionsFile}
     config_helper=@AGENT_ENV_OUTPUT@/lib/config.py
     python_bin=${python}/bin/python
     nix_store=${pkgs.nix}/bin/nix-store
@@ -160,6 +162,7 @@ builtins.deepSeq (builtins.attrNames skills ++ builtins.attrNames agents ++ buil
       --prefix PATH : ${lib.makeBinPath [ pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.jq pkgs.flock ]} \
       --add-flags "$out/lib/activate.sh"
   '')
+
 
 
 
