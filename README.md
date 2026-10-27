@@ -288,9 +288,10 @@ are atomic per file, not a multi-file transaction.
 ## Proxy deployment fragments
 
 Every project output contains `mcp-proxy.json` and `mcp-connections.json`.
-Activation copies both into the directory passed to `--project`: pass the directory
+Activation copies them as `mcp-proxy.sample.json` and `mcp-connections.sample.json`
+into the directory passed to `--project`: pass the directory
 containing your project's `flake.nix` to place them beside it. Their paths are printed.
-These are generated files, overwritten from the current store output on every
+These are generated samples, overwritten from the current store output on every
 activation, including a cached activation. Destination symlinks are replaced,
 not followed. Keep your actual proxy configuration elsewhere and manually merge
 the fragments; activation does not start, restart, or configure the gateway.

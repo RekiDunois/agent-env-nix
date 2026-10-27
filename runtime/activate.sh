@@ -196,9 +196,9 @@ case "$root_policy" in retain-roots|release-roots) ;; *) die 'invalid config roo
 for kind in skills agents; do mv -- "$work/$kind.desired" "$state_dir/$kind.list"; done
 if [ "$action" = apply ]; then
   # Generated fragments: replace the leaf, never follow a destination symlink.
-  cp --remove-destination -T -- "$proxy_config" "$project/mcp-proxy.json"
-  cp --remove-destination -T -- "$connections_file" "$project/mcp-connections.json"
-  printf 'agent-env: exported %s and %s (generated files; overwritten on activation).\n' "$project/mcp-proxy.json" "$project/mcp-connections.json"
+  cp --remove-destination -T -- "$proxy_config" "$project/mcp-proxy.sample.json"
+  cp --remove-destination -T -- "$connections_file" "$project/mcp-connections.sample.json"
+  printf 'agent-env: exported %s and %s (generated files; overwritten on activation).\n' "$project/mcp-proxy.sample.json" "$project/mcp-connections.sample.json"
 fi
 if [ "$root_policy" = release-roots ]; then
   shopt -s nullglob dotglob

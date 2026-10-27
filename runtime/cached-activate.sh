@@ -56,8 +56,9 @@ if [[ $force == false && -f $marker && $(<"$marker") == "$expected" ]]; then
   # These generated fragments are refreshed even when installation is cached.
   # Replace linked leaves rather than writing through them.
   for file in mcp-proxy.json mcp-connections.json; do
-    "$coreutils/cp" --remove-destination -T -- "$environment/$file" "$project/$file"
-    printf 'agent-env: exported %s (generated file; overwritten on activation).\n' "$project/$file"
+    target="$project/${file%.json}.sample.json"
+    "$coreutils/cp" --remove-destination -T -- "$environment/$file" "$target"
+    printf 'agent-env: exported %s (generated file; overwritten on activation).\n' "$target"
   done
   exit 0
 fi

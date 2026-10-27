@@ -62,11 +62,11 @@ class ShellActivationTests(unittest.TestCase):
                 source[key] = Path(shlex.split(value)[0]).read_bytes()
         outside = self.base / "outside-fragment"
         outside.write_text("untouched")
-        (self.project / "mcp-proxy.json").symlink_to(outside)
-        (self.project / "mcp-connections.json").write_text("old or edited")
+        (self.project / "mcp-proxy.sample.json").symlink_to(outside)
+        (self.project / "mcp-connections.sample.json").write_text("old or edited")
         result = self.run_activation()
-        for file, key in (("mcp-proxy.json", "proxy_config"),
-                          ("mcp-connections.json", "connections_file")):
+        for file, key in (("mcp-proxy.sample.json", "proxy_config"),
+                          ("mcp-connections.sample.json", "connections_file")):
             target = self.project / file
             self.assertEqual(target.read_bytes(), source[key])
             self.assertFalse(target.is_symlink())

@@ -125,19 +125,22 @@ editor.commit(editor.prepare())
         self.run_activation()
         outside = self.root / "outside"
         outside.write_text("untouched")
-        (self.project / "mcp-proxy.json").symlink_to(outside)
-        (self.project / "mcp-connections.json").write_text("old or edited")
+        original = self.project / "mcp-proxy.json"
+        original.write_text("user config")
+        (self.project / "mcp-proxy.sample.json").symlink_to(outside)
+        (self.project / "mcp-connections.sample.json").write_text("old or edited")
         result = self.run_activation()
         for file in ("mcp-proxy.json", "mcp-connections.json"):
-            target = self.project / file
+            target = self.project / file.replace(".json", ".sample.json")
             self.assertEqual(target.read_bytes(), (self.root / "environment-a" / file).read_bytes())
             self.assertFalse(target.is_symlink())
             self.assertIn(str(target), result.stdout)
             target.unlink()
         self.assertEqual(outside.read_text(), "untouched")
+        self.assertEqual(original.read_text(), "user config")
         self.run_activation()
-        self.assertTrue((self.project / "mcp-proxy.json").is_file())
-        self.assertTrue((self.project / "mcp-connections.json").is_file())
+        self.assertTrue((self.project / "mcp-proxy.sample.json").is_file())
+        self.assertTrue((self.project / "mcp-connections.sample.json").is_file())
         self.assertEqual(len(self.calls()), 1)
 
     def test_different_entrypoints_share_project_state(self):
