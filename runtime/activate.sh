@@ -194,6 +194,12 @@ done
 root_policy=$("$python_bin" "$config_helper" commit "${config_args[@]}")
 case "$root_policy" in retain-roots|release-roots) ;; *) die 'invalid config root-retention result' ;; esac
 for kind in skills agents; do mv -- "$work/$kind.desired" "$state_dir/$kind.list"; done
+if [ "$action" = apply ]; then
+  # Generated fragments: replace the leaf, never follow a destination symlink.
+  cp --remove-destination -T -- "$proxy_config" "$project/mcp-proxy.json"
+  cp --remove-destination -T -- "$connections_file" "$project/mcp-connections.json"
+  printf 'agent-env: exported %s and %s (generated files; overwritten on activation).\n' "$project/mcp-proxy.json" "$project/mcp-connections.json"
+fi
 if [ "$root_policy" = release-roots ]; then
   shopt -s nullglob dotglob
   for root in "$state_dir/roots/"*; do
@@ -205,4 +211,5 @@ else
   printf 'agent-env: retained previous GC roots for preserved configuration or legacy reused content.\n'
 fi
 printf 'agent-env: %s completed.\n' "$action"
+
 

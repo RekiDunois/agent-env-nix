@@ -54,6 +54,25 @@ class ShellActivationTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         return result
 
+    def test_apply_exports_current_fragments_and_replaces_generated_leaves(self):
+        source = {}
+        for line in self.script.read_text().splitlines():
+            if line.startswith(("proxy_config=", "connections_file=")):
+                key, value = line.split("=", 1)
+                source[key] = Path(shlex.split(value)[0]).read_bytes()
+        outside = self.base / "outside-fragment"
+        outside.write_text("untouched")
+        (self.project / "mcp-proxy.json").symlink_to(outside)
+        (self.project / "mcp-connections.json").write_text("old or edited")
+        result = self.run_activation()
+        for file, key in (("mcp-proxy.json", "proxy_config"),
+                          ("mcp-connections.json", "connections_file")):
+            target = self.project / file
+            self.assertEqual(target.read_bytes(), source[key])
+            self.assertFalse(target.is_symlink())
+            self.assertIn(str(target), result.stdout)
+        self.assertEqual(outside.read_text(), "untouched")
+
     def test_root_registration_failure_prevents_publication(self):
         self.nix_store.write_text(self.shebang + "exit 1\n")
         self.run_activation(succeeds=False)
@@ -175,3 +194,4 @@ class ShellActivationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
